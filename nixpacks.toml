@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ['nodejs-18_x']
+
+[phases.install]
+cmds = ['npm install --production']
+
+[phases.build]
+cmds = ['mkdir -p catalog estimate backup']
+
+[start]
+cmd = 'node server.js'

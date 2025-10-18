@@ -1,0 +1,25 @@
+# Node
+node_modules/
+npm-debug.log
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (не коммитим данные пользователей)
+backup/*
+!backup/.gitkeep
+estimate/*.json
+catalog/*.json
+!catalog/catalog.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+
+# Logs
+*.log

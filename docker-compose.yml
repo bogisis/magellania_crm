@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  quote-calculator:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Сохраняем данные на хосте
+      - ./catalog:/app/catalog
+      - ./estimate:/app/estimate
+      - ./backup:/app/backup
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
