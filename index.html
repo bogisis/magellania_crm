@@ -9198,6 +9198,9 @@
     <!-- API Client Integration -->
     <script src="/apiClient.js"></script>
 
+    <!-- Error Boundary Integration -->
+    <script src="/errorBoundary.js"></script>
+
     <!-- Модальное окно для списка смет с вкладками -->
     <div id="estimates-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
         <div style="background: white; border-radius: 8px; width: 90%; max-width: 800px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
@@ -9271,6 +9274,13 @@
         // ВАЖНО: Создаём QuoteCalc ПОСЛЕ apiClient
         const QuoteCalc = new ProfessionalQuoteCalculator();
         window.QuoteCalc = QuoteCalc;
+
+        // ===== ErrorBoundary Integration =====
+        // Создаём ErrorBoundary для централизованной обработки ошибок
+        const errorBoundary = new ErrorBoundary(QuoteCalc);
+        window.errorBoundary = errorBoundary;
+
+        console.log('[Init] ErrorBoundary initialized successfully');
 
         // УДАЛЕНО: loadAutosaveFromServer() больше не нужна
         // Теперь автосохранение сохраняет напрямую в текущий файл сметы
@@ -9727,6 +9737,48 @@
             };
         })();
 
+        // ===== Оборачиваем критические методы с ErrorBoundary =====
+        (function() {
+            // Сохраняем оригинальные методы
+            const originalLoadQuote = QuoteCalc.loadQuoteFromServer;
+            const originalSaveQuote = QuoteCalc.saveQuoteToServer;
+            const originalUpdateCalc = QuoteCalc.updateCalculations;
+
+            // Оборачиваем loadQuoteFromServer
+            if (originalLoadQuote) {
+                QuoteCalc.loadQuoteFromServer = errorBoundary.wrapAsync(
+                    originalLoadQuote.bind(QuoteCalc),
+                    'load'
+                );
+                console.log('[ErrorBoundary] Wrapped loadQuoteFromServer');
+            }
+
+            // Оборачиваем saveQuoteToServer
+            if (originalSaveQuote) {
+                QuoteCalc.saveQuoteToServer = errorBoundary.wrapAsync(
+                    originalSaveQuote.bind(QuoteCalc),
+                    'save'
+                );
+                console.log('[ErrorBoundary] Wrapped saveQuoteToServer');
+            }
+
+            // Оборачиваем updateCalculations (синхронная, поэтому обертка для sync)
+            if (originalUpdateCalc) {
+                QuoteCalc.updateCalculations = function() {
+                    try {
+                        return originalUpdateCalc.call(this);
+                    } catch (err) {
+                        const snapshot = errorBoundary.captureSnapshot();
+                        errorBoundary.logError('calculations', err, snapshot, 0);
+                        errorBoundary.showNotification('calculations', err);
+                        errorBoundary.tryRecover('calculations', err, snapshot);
+                        throw err;
+                    }
+                };
+                console.log('[ErrorBoundary] Wrapped updateCalculations');
+            }
+        })();
+
         // Глобальные функции для работы со сметами (ДОЛЖНЫ БЫТЬ ВНЕ IIFE!)
         // Показать список смет
         window.showEstimatesList = async function() {
@@ -9901,6 +9953,18 @@
                 window.QuoteCalc.showNotification('Ошибка импорта: ' + err.message, true);
             }
         };
+
+        // Оборачиваем импорт с ErrorBoundary
+        (function() {
+            const originalImport = window.importQuoteFile;
+            if (originalImport) {
+                window.importQuoteFile = errorBoundary.wrapAsync(
+                    originalImport,
+                    'import'
+                );
+                console.log('[ErrorBoundary] Wrapped importQuoteFile');
+            }
+        })();
 
         // Инициализация серверной интеграции
         document.addEventListener('DOMContentLoaded', function() {
