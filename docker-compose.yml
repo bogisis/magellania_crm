@@ -1,16 +1,121 @@
 version: '3.8'
 
 services:
-  quote-calculator:
-    build: .
+  # ========== PRODUCTION ==========
+  quote-production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: quote-calculator:latest
+    container_name: quote-prod
     ports:
-      - "3000:3000"
+      - "3005:3000"
     volumes:
-      # Сохраняем данные на хосте
-      - ./catalog:/app/catalog
-      - ./estimate:/app/estimate
-      - ./backup:/app/backup
+      # Named volumes для данных
+      - prod-catalog:/app/catalog
+      - prod-estimate:/app/estimate
+      - prod-backup:/app/backup
     environment:
       - NODE_ENV=production
+      - APP_ENV=production
       - PORT=3000
     restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.stop-timeout=30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========== STAGING ==========
+  quote-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: staging
+    image: quote-calculator:staging
+    container_name: quote-staging
+    ports:
+      - "3006:3000"
+    volumes:
+      # Staging свои volumes
+      - staging-catalog:/app/catalog
+      - staging-estimate:/app/estimate
+      - staging-backup:/app/backup
+      # Read-only доступ к production (для копирования)
+      - prod-catalog:/app/prod-catalog:ro
+      - prod-estimate:/app/prod-estimate:ro
+      - prod-backup:/app/prod-backup:ro
+    environment:
+      - NODE_ENV=staging
+      - APP_ENV=staging
+      - PORT=3000
+      - COPY_FROM_PROD=true  # Копировать данные при старте
+    restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.stop-timeout=30s
+    depends_on:
+      - quote-production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========== CONTINUOUS BACKUP (optional) ==========
+  backup-service:
+    image: offen/docker-volume-backup:latest
+    container_name: quote-backup
+    restart: always
+    volumes:
+      - prod-catalog:/backup/catalog:ro
+      - prod-estimate:/backup/estimate:ro
+      - prod-backup:/backup/backup:ro
+      - ./backups:/archive  # Бэкапы на хосте
+    environment:
+      - BACKUP_CRON_EXPRESSION=0 * * * *  # Каждый час
+      - BACKUP_RETENTION_DAYS=30
+      - BACKUP_FILENAME=quote-%Y%m%d-%H%M%S.tar.gz
+    profiles:
+      - backup  # Запускается только с --profile backup
+
+# ========== VOLUMES ==========
+volumes:
+  # Production volumes
+  prod-catalog:
+    name: quote-prod-catalog
+    labels:
+      environment: production
+      backup: required
+  prod-estimate:
+    name: quote-prod-estimate
+    labels:
+      environment: production
+      backup: required
+  prod-backup:
+    name: quote-prod-backup
+    labels:
+      environment: production
+      backup: required
+
+  # Staging volumes
+  staging-catalog:
+    name: quote-staging-catalog
+    labels:
+      environment: staging
+  staging-estimate:
+    name: quote-staging-estimate
+    labels:
+      environment: staging
+  staging-backup:
+    name: quote-staging-backup
+    labels:
+      environment: staging

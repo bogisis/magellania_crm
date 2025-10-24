@@ -1,0 +1,30 @@
+{
+  "node": {
+    "2af93c9cd7a6a2fa578d1e53d341dfd20699e0e8": {
+      "workers": {
+        "app/(app)/page": "(rsc)/./node_modules/.pnpm/next@14.2.15_@babel+core@7.28.3_@opentelemetry+api@1.9.0_@playwright+test@1.52.0_react-_ce4b0c5a6d3df861fa54bbda3b03f67b/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbogisis%2FDesktop%2F%D1%81%D0%BC%D0%B5%D1%82%D1%8B%2Ffor_deploy%2Finvoice_exampes%2Feasy-invoice-pdf%2Fsrc%2Flib%2Fcheck-device.server.ts%22%2C%5B%22%24%24ACTION_0%22%2C%22checkDeviceUserAgent%22%5D%5D%5D&__client_imported__=!"
+      },
+      "layer": {
+        "app/(app)/page": "rsc"
+      }
+    },
+    "72623863d9f6075143a606a52cffc139303b745d": {
+      "workers": {
+        "app/(app)/page": "(rsc)/./node_modules/.pnpm/next@14.2.15_@babel+core@7.28.3_@opentelemetry+api@1.9.0_@playwright+test@1.52.0_react-_ce4b0c5a6d3df861fa54bbda3b03f67b/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbogisis%2FDesktop%2F%D1%81%D0%BC%D0%B5%D1%82%D1%8B%2Ffor_deploy%2Finvoice_exampes%2Feasy-invoice-pdf%2Fsrc%2Flib%2Fcheck-device.server.ts%22%2C%5B%22%24%24ACTION_0%22%2C%22checkDeviceUserAgent%22%5D%5D%5D&__client_imported__=!"
+      },
+      "layer": {
+        "app/(app)/page": "rsc"
+      }
+    },
+    "2fa25d9195e1fefc2a8a57ce8e0eebe42b586f22": {
+      "workers": {
+        "app/(app)/page": "(action-browser)/./node_modules/.pnpm/next@14.2.15_@babel+core@7.28.3_@opentelemetry+api@1.9.0_@playwright+test@1.52.0_react-_ce4b0c5a6d3df861fa54bbda3b03f67b/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbogisis%2FDesktop%2F%D1%81%D0%BC%D0%B5%D1%82%D1%8B%2Ffor_deploy%2Finvoice_exampes%2Feasy-invoice-pdf%2Fsrc%2Factions%2Fsubscribe-action.ts%22%2C%5B%22subscribeAction%22%5D%5D%5D&__client_imported__=true!"
+      },
+      "layer": {
+        "app/(app)/page": "action-browser"
+      }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "ZQXFrlJnLVNLqhsB4qOv66/c2iKjiuNZkep1i4ABbh8="
+}

@@ -1,11 +1,45 @@
+# Dependencies
 node_modules
 npm-debug.log
+
+# Git
 .git
 .gitignore
-.DS_Store
+
+# IDE
+.vscode
+.idea
+.claude
+*.swp
+
+# Docs
 *.md
 docs/
-.vscode/
-.claude/
+
+# Tests
+__tests__/
+__test_*__/
+coverage/
+jest.config.js
+
+# Deployment
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (не включаем в образ)
 backup/*
-!backup/.gitkeep
+estimate/*.json
+catalog/*.json
+!catalog/catalog.json
+
+# Logs
+*.log
+
+# Scripts
+scripts/
+.github/

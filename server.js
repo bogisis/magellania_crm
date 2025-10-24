@@ -448,6 +448,56 @@ app.post('/api/transaction/rollback', async (req, res) => {
     }
 });
 
+// ============ HEALTH CHECK ============
+app.get('/health', async (req, res) => {
+    try {
+        // Проверяем доступность директорий
+        const checks = {
+            catalog: false,
+            estimate: false,
+            backup: false,
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
+        };
+
+        // Проверяем существование директорий
+        try {
+            await fs.access(CATALOG_DIR);
+            checks.catalog = true;
+        } catch (err) {
+            checks.catalog = false;
+        }
+
+        try {
+            await fs.access(ESTIMATE_DIR);
+            checks.estimate = true;
+        } catch (err) {
+            checks.estimate = false;
+        }
+
+        try {
+            await fs.access(BACKUP_DIR);
+            checks.backup = true;
+        } catch (err) {
+            checks.backup = false;
+        }
+
+        const healthy = checks.catalog && checks.estimate && checks.backup;
+
+        res.status(healthy ? 200 : 503).json({
+            status: healthy ? 'healthy' : 'unhealthy',
+            version: '2.3.0',
+            environment: process.env.APP_ENV || 'unknown',
+            checks
+        });
+    } catch (err) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: err.message
+        });
+    }
+});
+
 // ============ Запуск сервера ============
 
 // Создаём директории при загрузке модуля

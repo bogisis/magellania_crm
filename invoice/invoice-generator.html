@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Generator Pro v1.0.2</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='9' y1='9' x2='15' y2='9'/%3E%3Cline x1='9' y1='13' x2='15' y2='13'/%3E%3Cline x1='9' y1='17' x2='15' y2='17'/%3E%3C/svg%3E">
+    <style>
+        :root {
+            --primary: #1e40af;
+            --secondary: #059669;
+            --accent: #d97706;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --spacing: 0.25rem;
+            --radius: 0.375rem;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--gray-800);
+            background: var(--gray-50);
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow-lg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Card */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: var(--font);
+            transition: all 0.2s;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #1e3a8a;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #047857;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
+        .btn-outline {
+            background: white;
+            color: var(--gray-700);
+            border: 1px solid var(--gray-300);
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: var(--gray-50);
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.875rem;
+            font-size: 13px;
+        }
+
+        /* Invoice Number Display */
+        .invoice-number-display {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            padding: 1rem;
+            background: var(--gray-50);
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius);
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            background: #dcfce7;
+            color: var(--secondary);
+        }
+
+        /* Items List */
+        .items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .item-card {
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
+            background: white;
+            transition: box-shadow 0.2s;
+        }
+
+        .item-card:hover {
+            box-shadow: var(--shadow);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .item-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .item-fields {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 0.75rem;
+            align-items: end;
+        }
+
+        .item-total {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--gray-200);
+            text-align: right;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Totals Section */
+        .totals {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            font-size: 15px;
+        }
+
+        .totals-row.subtotal {
+            border-bottom: 1px solid var(--gray-300);
+        }
+
+        .totals-row.grand-total {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            border-top: 3px solid var(--primary);
+            padding-top: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--gray-500);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            border-left: 4px solid var(--secondary);
+            display: none;
+            z-index: 1000;
+            min-width: 300px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.show {
+            display: block;
+        }
+
+        .notification.error {
+            border-left-color: var(--danger);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+
+        .notification.hiding {
+            animation: slideOut 0.3s ease;
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                background: white;
+            }
+
+            .header,
+            .card,
+            .btn,
+            .no-print {
+                display: none !important;
+            }
+
+            #print-content {
+                display: block !important;
+            }
+        }
+
+        #print-content {
+            display: none;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .text-muted {
+            color: var(--gray-500);
+            font-size: 13px;
+        }
+
+        .mt-2 {
+            margin-top: 0.5rem;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: 1.5rem 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <div class="header-title">
+                📄 Invoice Generator Pro
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-outline" onclick="App.importFromQuote()">
+                    📥 Импорт сметы
+                </button>
+                <button class="btn btn-secondary" onclick="App.saveInvoice()">
+                    💾 Сохранить
+                </button>
+                <button class="btn btn-primary" onclick="App.print()">
+                    🖨️ Печать / PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <div class="grid">
+            <!-- Left Column: Invoice Info -->
+            <div>
+                <div class="card">
+                    <div class="card-title">
+                        ℹ️ Информация о документе
+                    </div>
+
+                    <!-- Language & Document Type -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">Язык</label>
+                            <select id="language" class="form-select" onchange="App.updateTotals()">
+                                <option value="ru">Русский</option>
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label class="form-label">Тип</label>
+                            <select id="document-type" class="form-select" onchange="App.updateTotals()">
+                                <option value="check">Чек</option>
+                                <option value="invoice">Счёт</option>
+                                <option value="receipt">Квитанция</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Number -->
+                    <div class="invoice-number-display" id="invoice-number-display">
+                        INV-20251024-0001
+                    </div>
+                    <input type="hidden" id="invoice-number">
+
+                    <!-- Dates -->
+                    <div class="form-group">
+                        <label class="form-label">Дата выставления *</label>
+                        <input type="date" id="invoice-date" class="form-input" oninput="App.updateTotals()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Срок оплаты</label>
+                        <input type="date" id="due-date" class="form-input" oninput="App.updateTotals()">
+                    </div>
+
+                    <!-- Tour Dates -->
+                    <div class="form-group">
+                        <label class="form-label">Даты тура</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <input type="date" id="tour-start-date" class="form-input" placeholder="Начало" oninput="App.updateTotals()">
+                            <input type="date" id="tour-end-date" class="form-input" placeholder="Конец" oninput="App.updateTotals()">
+                        </div>
+                    </div>
+
+                    <!-- PAX Count -->
+                    <div class="form-group">
+                        <label class="form-label">Количество человек</label>
+                        <input type="number" id="pax-count" value="0" min="0" class="form-input" oninput="App.updateTotals()">
+                    </div>
+
+                    <!-- Currency -->
+                    <div class="form-group">
+                        <label class="form-label">Валюта</label>
+                        <select id="currency" class="form-select" onchange="App.updateTotals()">
+                            <option value="$">USD ($)</option>
+                            <option value="€">EUR (€)</option>
+                            <option value="₽">RUB (₽)</option>
+                            <option value="£">GBP (£)</option>
+                        </select>
+                    </div>
+
+                    <!-- Tax Rate -->
+                    <div class="form-group">
+                        <label class="form-label">НДС (%)</label>
+                        <input type="number" id="tax-rate" value="0" min="0" max="100" step="1" class="form-input" oninput="App.updateTotals()">
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- Client Info -->
+                    <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 0.75rem; color: var(--gray-700);">👤 Данные клиента</h4>
+
+                    <!-- Client Type Toggle -->
+                    <div class="form-group">
+                        <label class="form-label">Тип клиента</label>
+                        <select id="client-type" class="form-select" onchange="App.toggleClientType()">
+                            <option value="individual">Физическое лицо</option>
+                            <option value="legal">Юридическое лицо</option>
+                        </select>
+                    </div>
+
+                    <!-- Individual fields -->
+                    <div id="client-individual-fields">
+                        <div class="form-group">
+                            <label class="form-label">ФИО *</label>
+                            <input type="text" id="client-name-individual" class="form-input" placeholder="Иванов Иван Иванович" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Телефон</label>
+                            <input type="text" id="client-phone-individual" class="form-input" placeholder="+7 999 123 45 67" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" id="client-email-individual" class="form-input" placeholder="ivan@example.com" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Адрес</label>
+                            <textarea id="client-address-individual" class="form-textarea" placeholder="Город, улица" oninput="App.updateTotals()"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Legal entity fields -->
+                    <div id="client-legal-fields" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label">Название компании *</label>
+                            <input type="text" id="client-name-legal" class="form-input" placeholder="ООО Компания" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">ИНН</label>
+                            <input type="text" id="client-inn" class="form-input" placeholder="1234567890" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Юридический адрес</label>
+                            <textarea id="client-address-legal" class="form-textarea" placeholder="123456, г. Москва, ул. Ленина, д.1" oninput="App.updateTotals()"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Контактное лицо</label>
+                            <input type="text" id="client-contact-person" class="form-input" placeholder="Иванов И.И." oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Телефон</label>
+                            <input type="text" id="client-phone-legal" class="form-input" placeholder="+7 495 123 45 67" oninput="App.updateTotals()">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" id="client-email-legal" class="form-input" placeholder="company@example.com" oninput="App.updateTotals()">
+                        </div>
+                    </div>
+
+                    <!-- Hidden unified fields for compatibility -->
+                    <input type="hidden" id="client-name">
+                    <input type="hidden" id="client-email">
+                    <input type="hidden" id="client-phone">
+                    <input type="hidden" id="client-address">
+
+                    <div class="divider"></div>
+
+                    <!-- Actions -->
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <button class="btn btn-outline" onclick="App.loadInvoice()">
+                            📂 Загрузить счёт
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="App.reset()">
+                            🗑️ Новый счёт
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Totals Card -->
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">
+                        🧮 Итого
+                    </div>
+                    <div class="totals">
+                        <div class="totals-row subtotal">
+                            <span>Подытог:</span>
+                            <span id="subtotal">$0</span>
+                        </div>
+                        <div class="totals-row">
+                            <span>НДС:</span>
+                            <span id="tax-amount">$0</span>
+                        </div>
+                        <div class="totals-row grand-total">
+                            <span>ИТОГО:</span>
+                            <span id="grand-total">$0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Items & Details -->
+            <div>
+                <!-- Items Card -->
+                <div class="card">
+                    <div class="card-title">
+                        📋 Услуги / Items
+                        <span class="badge" id="items-count">0 услуг</span>
+                    </div>
+
+                    <button class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="App.addItem()">
+                        ➕ Добавить услугу
+                    </button>
+
+                    <div id="items-container">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>Нет услуг в счёте</p>
+                            <p class="text-muted">Импортируйте смету или добавьте вручную</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Company Settings -->
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">
+                        🏢 Настройки компании
+                    </div>
+
+                    <p class="text-muted" style="margin-bottom: 1rem; font-size: 12px;">
+                        Эти данные сохраняются отдельно и автоматически подставляются во все новые документы
+                    </p>
+
+                    <div class="form-group">
+                        <label class="form-label">Название компании *</label>
+                        <input type="text" id="company-name" class="form-input" placeholder="Magellania Travel" oninput="App.updateTotals()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="company-email" class="form-input" placeholder="info@magellania.com" oninput="App.updateTotals()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Телефон / ИНН</label>
+                        <input type="text" id="company-phone" class="form-input" placeholder="27-96318222-3" oninput="App.updateTotals()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Адрес</label>
+                        <textarea id="company-address" class="form-textarea" placeholder="9410, Argentina, Ushuaia, Luis Vernet 2536" oninput="App.updateTotals()"></textarea>
+                    </div>
+
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="App.saveCompanySettings()">
+                        💾 Сохранить настройки компании
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Content -->
+    <div id="print-content"></div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <!-- Hidden Inputs -->
+    <input type="file" id="quote-file-input" accept=".json" onchange="App.handleQuoteImport(event)">
+    <input type="file" id="invoice-file-input" accept=".json" onchange="App.handleInvoiceLoad(event)">
+
+    <script>
+        const TRANSLATIONS = {
+            ru: {
+                documentTypes: { check: 'ЧЕК', invoice: 'СЧЁТ', receipt: 'КВИТАНЦИЯ' },
+                seller: 'Продавец',
+                buyer: 'Покупатель',
+                inn: 'ИНН',
+                email: 'Эл. почта',
+                itemNumber: '№',
+                itemName: 'Наименование товара/услуги',
+                quantity: 'Количество',
+                amount: 'Сумма',
+                subtotal: 'Подытог',
+                vat: 'НДС',
+                total: 'ИТОГО',
+                paymentMethod: 'Способ оплаты',
+                paymentDate: 'Дата оплаты',
+                paid: 'Оплачено',
+                dateIssued: 'Дата выставления',
+                page: 'Страница',
+                of: 'из',
+                tourDescription: 'Услуги по организации и бронированию туристических активностей для'
+            },
+            en: {
+                documentTypes: { check: 'RECEIPT', invoice: 'INVOICE', receipt: 'RECEIPT' },
+                seller: 'Seller',
+                buyer: 'Buyer',
+                inn: 'Tax ID',
+                email: 'Email',
+                itemNumber: '#',
+                itemName: 'Description',
+                quantity: 'Quantity',
+                amount: 'Amount',
+                subtotal: 'Subtotal',
+                vat: 'VAT',
+                total: 'TOTAL',
+                paymentMethod: 'Payment method',
+                paymentDate: 'Payment date',
+                paid: 'Paid',
+                dateIssued: 'Date issued',
+                page: 'Page',
+                of: 'of',
+                tourDescription: 'Services for organizing and booking tourist activities for'
+            },
+            es: {
+                documentTypes: { check: 'RECIBO', invoice: 'FACTURA', receipt: 'RECIBO' },
+                seller: 'Vendedor',
+                buyer: 'Comprador',
+                inn: 'NIF',
+                email: 'Email',
+                itemNumber: '#',
+                itemName: 'Descripción',
+                quantity: 'Cantidad',
+                amount: 'Importe',
+                subtotal: 'Subtotal',
+                vat: 'IVA',
+                total: 'TOTAL',
+                paymentMethod: 'Método de pago',
+                paymentDate: 'Fecha de pago',
+                paid: 'Pagado',
+                dateIssued: 'Fecha de emisión',
+                page: 'Página',
+                of: 'de',
+                tourDescription: 'Servicios de organización y reserva de actividades turísticas para'
+            }
+        };
+
+        const App = {
+            VERSION: '1.0.2',
+            notificationTimeout: null,
+            state: {
+                language: 'ru',
+                documentType: 'check',
+                invoiceNumber: '',
+                invoiceDate: '',
+                dueDate: '',
+                tourStartDate: '',
+                tourEndDate: '',
+                paxCount: 0,
+                currency: '$',
+                taxRate: 0,
+                clientType: 'individual',
+                clientName: '',
+                clientEmail: '',
+                clientPhone: '',
+                clientAddress: '',
+                clientInn: '',
+                clientContactPerson: '',
+                companyName: '',
+                companyEmail: '',
+                companyPhone: '',
+                companyAddress: '',
+                items: []
+            },
+
+            init() {
+                // Load company settings from localStorage
+                this.loadCompanySettings();
+
+                // Set today's date
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('invoice-date').value = today;
+                this.state.invoiceDate = today;
+
+                // Generate invoice number
+                this.generateInvoiceNumber();
+
+                // Load invoice from localStorage
+                this.loadFromLocalStorage();
+
+                // Setup autosave
+                this.setupAutoSave();
+
+                this.updateTotals();
+            },
+
+            loadCompanySettings() {
+                const saved = localStorage.getItem('invoice_company_settings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    this.state.companyName = settings.companyName || '';
+                    this.state.companyEmail = settings.companyEmail || '';
+                    this.state.companyPhone = settings.companyPhone || '';
+                    this.state.companyAddress = settings.companyAddress || '';
+                } else {
+                    // Default values
+                    this.state.companyName = 'Magellania Travel';
+                    this.state.companyEmail = 'Magellania.travel@gmail.com';
+                    this.state.companyPhone = '27-96318222-3';
+                    this.state.companyAddress = '9410, Argentina, Ushuaia, Luis Vernet 2536';
+                }
+
+                // Update UI
+                if (document.getElementById('company-name')) {
+                    document.getElementById('company-name').value = this.state.companyName;
+                    document.getElementById('company-email').value = this.state.companyEmail;
+                    document.getElementById('company-phone').value = this.state.companyPhone;
+                    document.getElementById('company-address').value = this.state.companyAddress;
+                }
+            },
+
+            saveCompanySettings() {
+                const settings = {
+                    companyName: this.state.companyName,
+                    companyEmail: this.state.companyEmail,
+                    companyPhone: this.state.companyPhone,
+                    companyAddress: this.state.companyAddress
+                };
+                localStorage.setItem('invoice_company_settings', JSON.stringify(settings));
+                this.showNotification('✅ Настройки компании сохранены', false);
+            },
+
+            toggleClientType() {
+                const clientType = document.getElementById('client-type').value;
+                this.state.clientType = clientType;
+
+                const individualFields = document.getElementById('client-individual-fields');
+                const legalFields = document.getElementById('client-legal-fields');
+
+                if (clientType === 'individual') {
+                    individualFields.style.display = 'block';
+                    legalFields.style.display = 'none';
+                } else {
+                    individualFields.style.display = 'none';
+                    legalFields.style.display = 'block';
+                }
+
+                this.updateTotals();
+            },
+
+            generateInvoiceNumber() {
+                let counter = parseInt(localStorage.getItem('invoice_counter') || '0');
+                counter++;
+                localStorage.setItem('invoice_counter', counter.toString());
+
+                const date = new Date();
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const num = String(counter).padStart(4, '0');
+
+                const invoiceNumber = `INV-${year}${month}${day}-${num}`;
+                this.state.invoiceNumber = invoiceNumber;
+                document.getElementById('invoice-number').value = invoiceNumber;
+                document.getElementById('invoice-number-display').textContent = invoiceNumber;
+            },
+
+            setupAutoSave() {
+                let saveTimeout;
+                document.addEventListener('input', (e) => {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => {
+                        this.saveToLocalStorage();
+                    }, 1000);
+                });
+            },
+
+            addItem(itemData = null) {
+                const item = itemData || {
+                    id: Date.now() + Math.random(),
+                    name: '',
+                    quantity: 1,
+                    price: 0
+                };
+
+                this.state.items.push(item);
+                this.renderItems();
+                this.updateTotals();
+            },
+
+            removeItem(id) {
+                if (confirm('Удалить услугу?')) {
+                    this.state.items = this.state.items.filter(i => i.id !== id);
+                    this.renderItems();
+                    this.updateTotals();
+                }
+            },
+
+            renderItems() {
+                const container = document.getElementById('items-container');
+                const countEl = document.getElementById('items-count');
+
+                countEl.textContent = `${this.state.items.length} ${this.pluralize(this.state.items.length, 'услуга', 'услуги', 'услуг')}`;
+
+                if (this.state.items.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>Нет услуг в счёте</p>
+                            <p class="text-muted">Импортируйте смету или добавьте вручную</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="items-list">
+                        ${this.state.items.map((item, index) => {
+                            const total = item.quantity * item.price;
+                            return `
+                                <div class="item-card">
+                                    <div class="item-header">
+                                        <div class="item-number">${index + 1}</div>
+                                        <button class="btn btn-danger btn-sm" onclick="App.removeItem(${item.id})">
+                                            🗑️ Удалить
+                                        </button>
+                                    </div>
+                                    <div class="item-fields">
+                                        <div class="form-group" style="margin-bottom: 0; grid-column: span 2;">
+                                            <label class="form-label">Название *</label>
+                                            <input
+                                                type="text"
+                                                class="form-input"
+                                                value="${this.escapeHtml(item.name)}"
+                                                placeholder="Название услуги"
+                                                oninput="App.updateItem(${item.id}, 'name', this.value)"
+                                            >
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label class="form-label">Кол-во</label>
+                                            <input
+                                                type="number"
+                                                class="form-input"
+                                                value="${item.quantity}"
+                                                min="1"
+                                                oninput="App.updateItem(${item.id}, 'quantity', parseFloat(this.value) || 1)"
+                                            >
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label class="form-label">Цена</label>
+                                            <input
+                                                type="number"
+                                                class="form-input"
+                                                value="${item.price}"
+                                                min="0"
+                                                step="0.01"
+                                                oninput="App.updateItem(${item.id}, 'price', parseFloat(this.value) || 0)"
+                                            >
+                                        </div>
+                                    </div>
+                                    <div class="item-total">
+                                        Итого: ${this.formatCurrency(total)}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            },
+
+            updateItem(id, field, value) {
+                const item = this.state.items.find(i => i.id === id);
+                if (item) {
+                    item[field] = value;
+                    this.updateTotals();
+                }
+            },
+
+            updateTotals() {
+                // Get state from inputs
+                this.state.language = document.getElementById('language')?.value || 'ru';
+                this.state.documentType = document.getElementById('document-type')?.value || 'check';
+                this.state.invoiceNumber = document.getElementById('invoice-number').value;
+                this.state.invoiceDate = document.getElementById('invoice-date').value;
+                this.state.dueDate = document.getElementById('due-date')?.value || '';
+                this.state.tourStartDate = document.getElementById('tour-start-date')?.value || '';
+                this.state.tourEndDate = document.getElementById('tour-end-date')?.value || '';
+                this.state.paxCount = parseInt(document.getElementById('pax-count')?.value) || 0;
+                this.state.currency = document.getElementById('currency').value;
+                this.state.taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
+                this.state.clientType = document.getElementById('client-type')?.value || 'individual';
+
+                // Get client data based on type
+                if (this.state.clientType === 'individual') {
+                    this.state.clientName = document.getElementById('client-name-individual')?.value || '';
+                    this.state.clientPhone = document.getElementById('client-phone-individual')?.value || '';
+                    this.state.clientEmail = document.getElementById('client-email-individual')?.value || '';
+                    this.state.clientAddress = document.getElementById('client-address-individual')?.value || '';
+                    this.state.clientInn = '';
+                    this.state.clientContactPerson = '';
+                } else {
+                    this.state.clientName = document.getElementById('client-name-legal')?.value || '';
+                    this.state.clientInn = document.getElementById('client-inn')?.value || '';
+                    this.state.clientAddress = document.getElementById('client-address-legal')?.value || '';
+                    this.state.clientContactPerson = document.getElementById('client-contact-person')?.value || '';
+                    this.state.clientPhone = document.getElementById('client-phone-legal')?.value || '';
+                    this.state.clientEmail = document.getElementById('client-email-legal')?.value || '';
+                }
+
+                // Update hidden fields for compatibility
+                document.getElementById('client-name').value = this.state.clientName;
+                document.getElementById('client-email').value = this.state.clientEmail;
+                document.getElementById('client-phone').value = this.state.clientPhone;
+                document.getElementById('client-address').value = this.state.clientAddress;
+
+                this.state.companyName = document.getElementById('company-name')?.value || this.state.companyName;
+                this.state.companyEmail = document.getElementById('company-email')?.value || this.state.companyEmail;
+                this.state.companyPhone = document.getElementById('company-phone')?.value || this.state.companyPhone;
+                this.state.companyAddress = document.getElementById('company-address')?.value || this.state.companyAddress;
+
+                // Calculate
+                const subtotal = this.state.items.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+                const taxAmount = subtotal * (this.state.taxRate / 100);
+                const grandTotal = subtotal + taxAmount;
+
+                // Update display
+                if (document.getElementById('subtotal')) {
+                    document.getElementById('subtotal').textContent = this.formatCurrency(subtotal);
+                }
+                if (document.getElementById('tax-amount')) {
+                    document.getElementById('tax-amount').textContent = this.formatCurrency(taxAmount);
+                }
+                if (document.getElementById('grand-total')) {
+                    document.getElementById('grand-total').textContent = this.formatCurrency(grandTotal);
+                }
+
+                if (this.state.items.length > 0) {
+                    this.renderItems();
+                }
+            },
+
+            formatCurrency(amount) {
+                return `${this.state.currency}${Math.round(amount).toLocaleString()}`;
+            },
+
+            formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                return date.toLocaleDateString('ru-RU', options);
+            },
+
+            formatDateLong(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                const months = {
+                    ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+                    en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+                    es: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                };
+                const lang = this.state.language || 'ru';
+                const day = date.getDate();
+                const month = months[lang][date.getMonth()];
+                const year = date.getFullYear();
+
+                if (lang === 'ru') {
+                    return `${day} ${month} ${year} г.`;
+                } else if (lang === 'es') {
+                    return `${day} de ${month} de ${year}`;
+                } else {
+                    return `${month} ${day}, ${year}`;
+                }
+            },
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            },
+
+            pluralize(n, one, few, many) {
+                const mod10 = n % 10;
+                const mod100 = n % 100;
+                if (mod10 === 1 && mod100 !== 11) return one;
+                if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+                return many;
+            },
+
+            // Import from quote
+            importFromQuote() {
+                document.getElementById('quote-file-input').click();
+            },
+
+            handleQuoteImport(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const quoteData = JSON.parse(e.target.result);
+
+                        // Support both formats: with metadata object and flat structure
+                        const meta = quoteData.metadata || quoteData;
+
+                        // Import tour dates and pax count
+                        if (meta.tourStart) {
+                            this.state.tourStartDate = meta.tourStart;
+                            document.getElementById('tour-start-date').value = meta.tourStart;
+                        }
+                        if (meta.tourEnd) {
+                            this.state.tourEndDate = meta.tourEnd;
+                            document.getElementById('tour-end-date').value = meta.tourEnd;
+                        }
+                        if (meta.paxCount) {
+                            this.state.paxCount = meta.paxCount;
+                            document.getElementById('pax-count').value = meta.paxCount;
+                        }
+
+                        // Import client info - try to detect if legal entity
+                        const clientName = meta.clientName || '';
+                        const isLegalEntity = clientName.includes('ООО') || clientName.includes('ИП') ||
+                                            clientName.includes('LLC') || clientName.includes('Ltd') ||
+                                            meta.clientInn || meta.legalAddress;
+
+                        if (isLegalEntity) {
+                            // Legal entity
+                            document.getElementById('client-type').value = 'legal';
+                            this.state.clientType = 'legal';
+                            document.getElementById('client-name-legal').value = clientName;
+                            if (meta.clientEmail) document.getElementById('client-email-legal').value = meta.clientEmail;
+                            if (meta.clientPhone) document.getElementById('client-phone-legal').value = meta.clientPhone;
+                            if (meta.clientAddress || meta.legalAddress) {
+                                document.getElementById('client-address-legal').value = meta.clientAddress || meta.legalAddress || '';
+                            }
+                            if (meta.clientInn) document.getElementById('client-inn').value = meta.clientInn;
+                            if (meta.contactPerson) document.getElementById('client-contact-person').value = meta.contactPerson;
+                        } else {
+                            // Individual
+                            document.getElementById('client-type').value = 'individual';
+                            this.state.clientType = 'individual';
+                            document.getElementById('client-name-individual').value = clientName;
+                            if (meta.clientEmail) document.getElementById('client-email-individual').value = meta.clientEmail;
+                            if (meta.clientPhone) document.getElementById('client-phone-individual').value = meta.clientPhone;
+                            if (meta.clientAddress) document.getElementById('client-address-individual').value = meta.clientAddress;
+                        }
+
+                        // Toggle client type fields
+                        this.toggleClientType();
+
+                        // Import services
+                        if (quoteData.services && Array.isArray(quoteData.services)) {
+                            this.state.items = quoteData.services.map(service => ({
+                                id: Date.now() + Math.random(),
+                                name: service.name || '',
+                                quantity: service.quantity || 1,
+                                price: this.calculateServicePrice(service, meta)
+                            }));
+                        }
+
+                        this.renderItems();
+                        this.updateTotals();
+                        this.showNotification(`✅ Смета импортирована: ${this.state.items.length} услуг`, false);
+                    } catch (error) {
+                        this.showNotification('❌ Ошибка импорта: ' + error.message, true);
+                        console.error('Import error:', error);
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            },
+
+            calculateServicePrice(service, metadata) {
+                const basePrice = service.price * service.quantity;
+                const markup = service.markup || 0;
+                const priceWithMarkup = basePrice * (1 + markup / 100);
+
+                const hiddenMarkup = metadata?.hiddenMarkup || 0;
+                const hiddenMarkupAmount = service.excludeFromMarkup ? 0 : (basePrice * hiddenMarkup / 100);
+
+                const partnerCommission = metadata?.partnerCommission || 0;
+                const partnerCommissionAmount = service.excludeFromMarkup ? 0 : (priceWithMarkup * partnerCommission / 100);
+
+                const finalPrice = priceWithMarkup + hiddenMarkupAmount + partnerCommissionAmount;
+                return Math.round(finalPrice / service.quantity);
+            },
+
+            // Save/Load
+            saveInvoice() {
+                try {
+                    const invoiceData = {
+                        version: this.VERSION,
+                        createdAt: new Date().toISOString(),
+                        ...this.state
+                    };
+
+                    const json = JSON.stringify(invoiceData, null, 2);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+
+                    const filename = `${this.state.invoiceNumber}_${this.state.clientName || 'client'}.json`
+                        .replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+
+                    URL.revokeObjectURL(url);
+                    this.showNotification('💾 Счёт сохранён', false);
+                } catch (error) {
+                    this.showNotification('❌ Ошибка сохранения', true);
+                }
+            },
+
+            loadInvoice() {
+                document.getElementById('invoice-file-input').click();
+            },
+
+            handleInvoiceLoad(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const invoiceData = JSON.parse(e.target.result);
+                        Object.assign(this.state, invoiceData);
+
+                        // Populate form
+                        document.getElementById('invoice-number').value = this.state.invoiceNumber;
+                        document.getElementById('invoice-number-display').textContent = this.state.invoiceNumber;
+                        document.getElementById('invoice-date').value = this.state.invoiceDate;
+                        document.getElementById('due-date').value = this.state.dueDate || '';
+                        document.getElementById('currency').value = this.state.currency;
+                        document.getElementById('tax-rate').value = this.state.taxRate;
+                        document.getElementById('client-name').value = this.state.clientName;
+                        document.getElementById('client-email').value = this.state.clientEmail;
+                        document.getElementById('client-phone').value = this.state.clientPhone;
+                        document.getElementById('client-address').value = this.state.clientAddress;
+                        document.getElementById('company-name').value = this.state.companyName;
+                        document.getElementById('company-email').value = this.state.companyEmail;
+                        document.getElementById('company-phone').value = this.state.companyPhone;
+                        document.getElementById('company-address').value = this.state.companyAddress;
+                        document.getElementById('bank-details').value = this.state.bankDetails;
+                        document.getElementById('notes').value = this.state.notes;
+
+                        this.renderItems();
+                        this.updateTotals();
+                        this.showNotification('📂 Счёт загружен', false);
+                    } catch (error) {
+                        this.showNotification('❌ Ошибка загрузки', true);
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            },
+
+            saveToLocalStorage() {
+                try {
+                    localStorage.setItem('invoice_autosave', JSON.stringify(this.state));
+                } catch (error) {
+                    console.warn('Could not save to localStorage:', error);
+                }
+            },
+
+            loadFromLocalStorage() {
+                try {
+                    const saved = localStorage.getItem('invoice_autosave');
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        Object.assign(this.state, data);
+
+                        if (this.state.invoiceNumber) {
+                            document.getElementById('invoice-number').value = this.state.invoiceNumber;
+                            document.getElementById('invoice-number-display').textContent = this.state.invoiceNumber;
+                        }
+                        document.getElementById('invoice-date').value = this.state.invoiceDate;
+                        document.getElementById('due-date').value = this.state.dueDate || '';
+                        document.getElementById('currency').value = this.state.currency;
+                        document.getElementById('tax-rate').value = this.state.taxRate;
+                        document.getElementById('client-name').value = this.state.clientName;
+                        document.getElementById('client-email').value = this.state.clientEmail;
+                        document.getElementById('client-phone').value = this.state.clientPhone;
+                        document.getElementById('client-address').value = this.state.clientAddress;
+                        document.getElementById('company-name').value = this.state.companyName;
+                        document.getElementById('company-email').value = this.state.companyEmail;
+                        document.getElementById('company-phone').value = this.state.companyPhone;
+                        document.getElementById('company-address').value = this.state.companyAddress;
+                        document.getElementById('bank-details').value = this.state.bankDetails;
+                        document.getElementById('notes').value = this.state.notes;
+
+                        this.renderItems();
+                    }
+                } catch (error) {
+                    console.warn('Could not load from localStorage:', error);
+                }
+            },
+
+            reset() {
+                if (confirm('Создать новый счёт? Все несохранённые данные будут потеряны.')) {
+                    this.state = {
+                        invoiceNumber: '',
+                        invoiceDate: new Date().toISOString().split('T')[0],
+                        dueDate: '',
+                        currency: '$',
+                        taxRate: 0,
+                        clientName: '',
+                        clientEmail: '',
+                        clientPhone: '',
+                        clientAddress: '',
+                        companyName: 'Magellania Travel Company',
+                        companyEmail: 'info@magellania.com',
+                        companyPhone: '+7 (999) 000-00-00',
+                        companyAddress: '',
+                        bankDetails: '',
+                        notes: '',
+                        items: []
+                    };
+
+                    this.generateInvoiceNumber();
+                    localStorage.removeItem('invoice_autosave');
+
+                    document.getElementById('invoice-date').value = this.state.invoiceDate;
+                    document.getElementById('due-date').value = '';
+                    document.getElementById('currency').value = '$';
+                    document.getElementById('tax-rate').value = 0;
+                    document.getElementById('client-name').value = '';
+                    document.getElementById('client-email').value = '';
+                    document.getElementById('client-phone').value = '';
+                    document.getElementById('client-address').value = '';
+                    document.getElementById('company-name').value = 'Magellania Travel Company';
+                    document.getElementById('company-email').value = 'info@magellania.com';
+                    document.getElementById('company-phone').value = '+7 (999) 000-00-00';
+                    document.getElementById('company-address').value = '';
+                    document.getElementById('bank-details').value = '';
+                    document.getElementById('notes').value = '';
+
+                    this.renderItems();
+                    this.updateTotals();
+                    this.showNotification('✨ Создан новый счёт', false);
+                }
+            },
+
+            print() {
+                if (!this.state.invoiceNumber || !this.state.clientName || this.state.items.length === 0) {
+                    this.showNotification('⚠️ Заполните данные и добавьте услуги', true);
+                    return;
+                }
+
+                const t = TRANSLATIONS[this.state.language];
+                const docTitle = t.documentTypes[this.state.documentType];
+
+                const subtotal = this.state.items.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+                const taxAmount = subtotal * (this.state.taxRate / 100);
+                const grandTotal = subtotal + taxAmount;
+
+                // Tour description
+                let tourDesc = '';
+                if (this.state.tourStartDate || this.state.tourEndDate) {
+                    tourDesc = `${t.tourDescription} ${this.escapeHtml(this.state.clientName)}.`;
+                    if (this.state.tourStartDate && this.state.tourEndDate) {
+                        tourDesc += ` ${this.formatDateLong(this.state.tourStartDate)} - ${this.formatDateLong(this.state.tourEndDate)}.`;
+                    }
+                    if (this.state.paxCount > 0) {
+                        tourDesc += ` ${this.state.language === 'ru' ? 'Количество человек' : this.state.language === 'es' ? 'Número de personas' : 'Number of people'}: ${this.state.paxCount}.`;
+                    }
+                }
+
+                const printContent = document.getElementById('print-content');
+                printContent.innerHTML = `
+                    <div style="font-family: Arial, sans-serif; color: #000; margin: 0; padding: 30px; font-size: 10pt; line-height: 1.4;">
+                        <!-- Header: Document Type + Number + Dates -->
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px;">
+                            <h1 style="font-size: 16pt; font-weight: bold; margin: 0;">${docTitle} ${this.escapeHtml(this.state.invoiceNumber)}</h1>
+                            <div style="text-align: right; font-size: 9pt;">
+                                <div>${t.dateIssued}: <strong>${this.formatDate(this.state.invoiceDate)}</strong></div>
+                                ${this.state.dueDate ? `<div>${t.paymentDate}: <strong>${this.formatDate(this.state.dueDate)}</strong></div>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Seller & Buyer (two columns) -->
+                        <div style="display: flex; gap: 40px; margin-bottom: 20px;">
+                            <!-- Seller -->
+                            <div style="flex: 1;">
+                                <h3 style="font-size: 11pt; font-weight: bold; margin: 0 0 10px 0;">${t.seller}</h3>
+                                <p style="margin: 0 0 4px 0; font-size: 10pt; font-weight: bold;">${this.escapeHtml(this.state.companyName)}</p>
+                                ${this.state.companyAddress ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${this.escapeHtml(this.state.companyAddress)}</p>` : ''}
+                                ${this.state.companyPhone ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${t.inn}: ${this.escapeHtml(this.state.companyPhone)}</p>` : ''}
+                                ${this.state.companyEmail ? `<p style="margin: 0; font-size: 9pt;">${t.email}: ${this.escapeHtml(this.state.companyEmail)}</p>` : ''}
+                            </div>
+
+                            <!-- Buyer -->
+                            <div style="flex: 1;">
+                                <h3 style="font-size: 11pt; font-weight: bold; margin: 0 0 10px 0;">${t.buyer}</h3>
+                                <p style="margin: 0 0 4px 0; font-size: 10pt; font-weight: bold;">${this.escapeHtml(this.state.clientName)}</p>
+                                ${this.state.clientAddress ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${this.escapeHtml(this.state.clientAddress)}</p>` : ''}
+                                ${this.state.clientInn ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${t.inn}: ${this.escapeHtml(this.state.clientInn)}</p>` : ''}
+                                ${this.state.clientContactPerson ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${this.state.language === 'ru' ? 'Контактное лицо' : this.state.language === 'es' ? 'Persona de contacto' : 'Contact person'}: ${this.escapeHtml(this.state.clientContactPerson)}</p>` : ''}
+                                ${this.state.clientEmail ? `<p style="margin: 0 0 4px 0; font-size: 9pt;">${this.escapeHtml(this.state.clientEmail)}</p>` : ''}
+                                ${this.state.clientPhone ? `<p style="margin: 0; font-size: 9pt;">${this.escapeHtml(this.state.clientPhone)}</p>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Tour Description -->
+                        ${tourDesc ? `
+                        <div style="margin-bottom: 20px; font-size: 9pt; line-height: 1.5;">
+                            ${tourDesc}
+                        </div>
+                        ` : ''}
+
+                        <!-- Items Table -->
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+                            <thead>
+                                <tr style="background: #f5f5f5;">
+                                    <th style="padding: 8px; text-align: center; font-size: 9pt; font-weight: bold; border: 1px solid #000; width: 40px;">${t.itemNumber}</th>
+                                    <th style="padding: 8px; text-align: left; font-size: 9pt; font-weight: bold; border: 1px solid #000;">${t.itemName}</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 9pt; font-weight: bold; border: 1px solid #000; width: 100px;">${t.quantity}</th>
+                                    <th style="padding: 8px; text-align: right; font-size: 9pt; font-weight: bold; border: 1px solid #000; width: 120px;">${t.amount}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${this.state.items.map((item, index) => {
+                                    const total = item.quantity * item.price;
+                                    return `
+                                        <tr>
+                                            <td style="padding: 8px; text-align: center; font-size: 9pt; border: 1px solid #000;">${index + 1}.</td>
+                                            <td style="padding: 8px; font-size: 9pt; border: 1px solid #000; line-height: 1.4;">
+                                                ${this.escapeHtml(item.name)}
+                                            </td>
+                                            <td style="padding: 8px; text-align: center; font-size: 9pt; border: 1px solid #000;">${item.quantity}</td>
+                                            <td style="padding: 8px; text-align: right; font-size: 9pt; border: 1px solid #000; white-space: nowrap;">${this.formatCurrency(total)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+
+                                <!-- Subtotal + VAT + Total rows -->
+                                ${this.state.taxRate > 0 ? `
+                                <tr style="background: #f9f9f9;">
+                                    <td colspan="3" style="padding: 8px; text-align: right; font-size: 10pt; border: 1px solid #000;">${t.subtotal}:</td>
+                                    <td style="padding: 8px; text-align: right; font-size: 10pt; border: 1px solid #000; white-space: nowrap;">${this.formatCurrency(subtotal)}</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td colspan="3" style="padding: 8px; text-align: right; font-size: 10pt; border: 1px solid #000;">${t.vat} (${this.state.taxRate}%):</td>
+                                    <td style="padding: 8px; text-align: right; font-size: 10pt; border: 1px solid #000; white-space: nowrap;">${this.formatCurrency(taxAmount)}</td>
+                                </tr>
+                                ` : ''}
+
+                                <!-- TOTAL row -->
+                                <tr style="background: #f5f5f5;">
+                                    <td colspan="3" style="padding: 10px; text-align: right; font-size: 11pt; font-weight: bold; border: 1px solid #000;">${t.total}:</td>
+                                    <td style="padding: 10px; text-align: right; font-size: 11pt; font-weight: bold; border: 1px solid #000; white-space: nowrap;">${this.formatCurrency(grandTotal)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <!-- Payment Info -->
+                        <div style="margin-bottom: 30px; font-size: 9pt;">
+                            <div style="margin-bottom: 4px;">${t.paymentMethod}: <strong>${this.state.language === 'ru' ? 'Наличные' : this.state.language === 'es' ? 'Efectivo' : 'Cash'}</strong></div>
+                            ${this.state.dueDate ? `<div>${t.paymentDate}: <strong>${this.formatDate(this.state.dueDate)}</strong></div>` : ''}
+                        </div>
+
+                        <!-- Amount Paid (large bold) -->
+                        <div style="margin-top: 40px; margin-bottom: 40px;">
+                            <h2 style="font-size: 14pt; font-weight: bold; margin: 0; text-decoration: underline;">${t.paid}: ${this.formatCurrency(grandTotal)}</h2>
+                        </div>
+
+                        <!-- Footer -->
+                        <div style="position: absolute; bottom: 30px; right: 30px; font-size: 9pt; color: #666;">
+                            ${t.page} 1 ${t.of} 1
+                        </div>
+                    </div>
+                `;
+
+                const originalTitle = document.title;
+                document.title = `${docTitle}_${this.state.invoiceNumber}_${this.state.clientName}`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+                setTimeout(() => {
+                    window.print();
+                    document.title = originalTitle;
+                    this.showNotification('🖨️ Документ отправлен на печать', false);
+                }, 300);
+            },
+
+            showNotification(message, isError = false) {
+                // Clear existing timeout
+                if (this.notificationTimeout) {
+                    clearTimeout(this.notificationTimeout);
+                }
+
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.className = `notification show ${isError ? 'error' : ''}`;
+
+                // Hide after 3 seconds
+                this.notificationTimeout = setTimeout(() => {
+                    notification.classList.add('hiding');
+                    setTimeout(() => {
+                        notification.classList.remove('show', 'hiding', 'error');
+                    }, 300);
+                }, 3000);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            App.init();
+        });
+    </script>
+</body>
+</html>

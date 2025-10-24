@@ -8,7 +8,21 @@
     "dev": "node server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:health": "./scripts/health-check.sh",
+    "docker:backup": "./scripts/pre-deploy-backup.sh",
+    "docker:deploy": "./scripts/deploy.sh",
+    "docker:rollback": "./scripts/rollback.sh",
+    "docker:prod": "docker-compose up -d quote-production",
+    "docker:staging": "docker-compose up -d quote-staging",
+    "docker:backup-service": "docker-compose --profile backup up -d backup-service",
+    "promote:production": "./scripts/promote-to-production.sh",
+    "release:create": "echo 'Usage: git tag v2.X.X && git push --tags' && read -p 'Enter version (v2.X.X): ' version && git tag $version && git push --tags",
+    "release:list": "git tag -l 'v*' --sort=-v:refname | head -10"
   },
   "keywords": [
     "quote",
