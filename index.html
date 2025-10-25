@@ -8,6 +8,9 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolygon points='16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76'/%3E%3C/svg%3E">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Quill.js Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -154,6 +157,40 @@
 
         .input.error, .textarea.error {
             border-color: var(--warning);
+        }
+
+        /* Quill Editor Styles */
+        .quill-editor-container {
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            background: white;
+        }
+
+        .quill-editor-container .ql-toolbar {
+            border: none;
+            border-bottom: 1px solid var(--gray-300);
+            background: #f9fafb;
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+
+        .quill-editor-container .ql-container {
+            border: none;
+            font-family: var(--font);
+            font-size: 12px;
+            min-height: 150px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .quill-editor-container .ql-editor {
+            min-height: 150px;
+            max-height: 400px;
+            padding: 12px;
+        }
+
+        .quill-editor-container .ql-editor.ql-blank::before {
+            color: #9ca3af;
+            font-style: normal;
         }
 
         .form-row {
@@ -1980,7 +2017,8 @@
                         </div>
                         <div class="collapsible-content">
                             <div class="collapsible-content-inner">
-                                <textarea class="textarea" placeholder="Внутренние заметки, пожелания клиента, важная информация" id="quote-description"></textarea>
+                                <div id="quote-description-editor" class="quill-editor-container"></div>
+                                <textarea class="textarea" placeholder="Внутренние заметки, пожелания клиента, важная информация" id="quote-description" style="display: none;"></textarea>
                             </div>
                         </div>
                     </div>
@@ -1996,7 +2034,8 @@
                         </div>
                         <div class="collapsible-content">
                             <div class="collapsible-content-inner">
-                                <textarea class="textarea" placeholder="Описание программы тура для клиента" id="program-description"></textarea>
+                                <div id="program-description-editor" class="quill-editor-container"></div>
+                                <textarea class="textarea" placeholder="Описание программы тура для клиента" id="program-description" style="display: none;"></textarea>
                             </div>
                         </div>
                     </div>
@@ -2610,7 +2649,8 @@
                             <div style="font-size: 11px; color: var(--gray-500); font-weight: 400; margin-top: 4px;">Эти условия будут напечатаны в коммерческом предложении</div>
                         </div>
 
-                        <textarea class="textarea" placeholder="Условия бронирования, сроки оплаты, правила отмены..." id="booking-terms" style="font-size: 12px; min-height: 300px; width: 100%;"></textarea>
+                        <div id="booking-terms-editor" class="quill-editor-container"></div>
+                        <textarea class="textarea" placeholder="Условия бронирования, сроки оплаты, правила отмены..." id="booking-terms" style="display: none;"></textarea>
                     </div>
                 </div>
 
@@ -3272,6 +3312,7 @@
                 this.renderCategoryOptions();
                 this.loadExternalCatalog();
                 this.bindEvents();
+                this.initQuillEditors(); // Инициализация WYSIWYG редакторов
                 this.bindKeyboardShortcuts();
                 this.updateCalculations();
                 // loadFromLocalStorage теперь async (загружает автосохранение с сервера)
@@ -4536,6 +4577,88 @@
                     const inner = section.querySelector('.collapsible-content-inner');
                     const height = inner.scrollHeight;
                     content.style.maxHeight = height + 'px';
+                }
+            }
+
+            initQuillEditors() {
+                // Конфигурация тулбара с поддержкой таблиц
+                const toolbarOptions = [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    [{ 'indent': '-1'}, { 'indent': '+1' }],
+                    [{ 'align': [] }],
+                    ['link'],
+                    ['clean']
+                ];
+
+                // Инициализация редактора для описания программы
+                const programDescEditor = new Quill('#program-description-editor', {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: toolbarOptions
+                    },
+                    placeholder: 'Описание программы тура для клиента'
+                });
+
+                // Инициализация редактора для условий (quote-description)
+                const quoteDescEditor = new Quill('#quote-description-editor', {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: toolbarOptions
+                    },
+                    placeholder: 'Внутренние заметки, пожелания клиента, важная информация'
+                });
+
+                // Инициализация редактора для условий бронирования
+                const bookingTermsEditor = new Quill('#booking-terms-editor', {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: toolbarOptions
+                    },
+                    placeholder: 'Условия бронирования, сроки оплаты, правила отмены...'
+                });
+
+                // Сохраняем ссылки на редакторы
+                this.quillEditors = {
+                    programDescription: programDescEditor,
+                    quoteDescription: quoteDescEditor,
+                    bookingTerms: bookingTermsEditor
+                };
+
+                // Синхронизация с hidden textarea и автосохранение
+                programDescEditor.on('text-change', () => {
+                    const html = programDescEditor.root.innerHTML;
+                    document.getElementById('program-description').value = html;
+                    this.state.programDescription = html;
+                    this.scheduleUpdate();
+                    this.markQuoteAsUnsaved();
+                });
+
+                quoteDescEditor.on('text-change', () => {
+                    const html = quoteDescEditor.root.innerHTML;
+                    document.getElementById('quote-description').value = html;
+                    this.state.quoteComments = html;
+                    this.scheduleUpdate();
+                    this.markQuoteAsUnsaved();
+                });
+
+                bookingTermsEditor.on('text-change', () => {
+                    const html = bookingTermsEditor.root.innerHTML;
+                    document.getElementById('booking-terms').value = html;
+                    this.state.bookingTerms = html;
+                    this.markQuoteAsUnsaved();
+                });
+
+                // Загружаем сохранённые данные в редакторы
+                if (this.state.programDescription) {
+                    programDescEditor.root.innerHTML = this.state.programDescription;
+                }
+                if (this.state.quoteComments) {
+                    quoteDescEditor.root.innerHTML = this.state.quoteComments;
+                }
+                if (this.state.bookingTerms) {
+                    bookingTermsEditor.root.innerHTML = this.state.bookingTerms;
                 }
             }
 
@@ -10073,7 +10196,7 @@
                             // Формируем строку с временем если оно указано
                             let timeInfo = '';
                             if (service.startTime || service.endTime) {
-                                timeInfo = '<br><small style="color: #666; font-size: 8pt;">';
+                                timeInfo = '<br><small style="color: #000; font-size: 8pt;">';
                                 if (service.startTime && service.endTime) {
                                     const duration = this.calculateDuration(service.startTime, service.endTime);
                                     timeInfo += `${service.startTime} - ${service.endTime}`;
@@ -10092,12 +10215,12 @@
                                 <tr>
                                     <td style="padding: 5pt; border: 1px solid #ddd; text-align: center; font-size: 9pt;">
                                         День ${service.day}<br>
-                                        <small style="color: #666; font-size: 8pt;">${calendarDate || ''}</small>
+                                        <small style="color: #000; font-size: 8pt;">${calendarDate || ''}</small>
                                     </td>
                                     <td style="padding: 5pt; border: 1px solid #ddd; font-size: 9.5pt; line-height: 1.2;">
                                         <strong>${service.displayName}</strong>${timeInfo}<br>
-                                        <small style="color: #666; font-size: 8.5pt; line-height: 1.1;">${service.description}</small><br>
-                                        <small style="color: #999; font-size: 7.5pt;">Цена за единицу: ${Math.round(service.displayPrice / service.quantity).toLocaleString()}</small>
+                                        <small style="color: #000; font-size: 8.5pt; line-height: 1.1;">${service.description}</small><br>
+                                        <small style="color: #000; font-size: 7.5pt;">Цена за единицу: ${Math.round(service.displayPrice / service.quantity).toLocaleString()}</small>
                                     </td>
                                     <td style="padding: 5pt; border: 1px solid #ddd; text-align: center; font-size: 9pt;">${service.quantity}</td>
                                     <td style="padding: 5pt; border: 1px solid #ddd; text-align: right; font-weight: 600; font-size: 9.5pt;">${service.displayPrice.toLocaleString()}</td>
@@ -10121,9 +10244,9 @@
                         ${this.state.clientName ? `<p><strong>Заказчик:</strong> ${this.state.clientName}</p>` : ''}
                         ${this.state.clientPhone ? `<p><strong>Контакты:</strong> ${this.state.clientPhone} ${this.state.clientEmail ? ', ' + this.state.clientEmail : ''}</p>` : ''}
                         ${this.state.programDescription ? `
-                            <div style="margin: 0.5cm 0; padding: 8pt; background: #f9fafb; border-left: 3px solid #333;">
-                                <p style="margin: 0 0 6pt 0; font-weight: 700; font-size: 10pt;">Описание программы:</p>
-                                <div style="white-space: pre-wrap; line-height: 1.3; font-size: 9.5pt;">${this.state.programDescription}</div>
+                            <div style="margin: 0.5cm 0; padding: 12pt; background: #f9fafb; border: 1px solid #ddd;">
+                                <p style="margin: 0 0 8pt 0; font-weight: 700; font-size: 10pt;">Описание программы:</p>
+                                <div style="line-height: 1.4; font-size: 9.5pt;">${this.state.programDescription}</div>
                             </div>
                         ` : ''}
                         <br>
@@ -10156,7 +10279,7 @@
                                         ${hotelsForPrint.map(service => `
                                             <tr>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; line-height: 1.2;">
-                                                    <strong>${service.displayName}</strong>${service.region ? '<br><small style="color: #666; font-size: 8pt;">' + service.region + '</small>' : ''}${service.description && service.description !== service.displayName ? '<br><small style="color: #666; font-size: 8pt;">' + service.description + '</small>' : ''}
+                                                    <strong>${service.displayName}</strong>${service.region ? '<br><small style="color: #000; font-size: 8pt;">' + service.region + '</small>' : ''}${service.description && service.description !== service.displayName ? '<br><small style="color: #000; font-size: 8pt;">' + service.description + '</small>' : ''}
                                                 </td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: center;">${service.quantity}</td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: right; font-weight: 600;">${service.displayPrice.toLocaleString()}</td>
@@ -10182,7 +10305,7 @@
                                         ${flightsForPrint.map(service => `
                                             <tr>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; line-height: 1.2;">
-                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #666; font-size: 8pt;">' + service.description + '</small>' : ''}
+                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #000; font-size: 8pt;">' + service.description + '</small>' : ''}
                                                 </td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: center;">${service.quantity}</td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: right; font-weight: 600;">${service.displayPrice.toLocaleString()}</td>
@@ -10208,7 +10331,7 @@
                                         ${otherServicesForPrint.map(service => `
                                             <tr>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; line-height: 1.2;">
-                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #666; font-size: 8pt;">' + service.description + '</small>' : ''}
+                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #000; font-size: 8pt;">' + service.description + '</small>' : ''}
                                                 </td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: center;">${service.quantity}</td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: right; font-weight: 600;">${service.displayPrice.toLocaleString()}</td>
@@ -10224,9 +10347,9 @@
                         </div>
 
                         ${this.state.bookingTerms ? `
-                            <div style="margin-top: 0.8cm; padding: 8pt; background: #f9fafb; border-left: 3px solid #333;">
-                                <p style="margin: 0 0 6pt 0; font-weight: 700; font-size: 10pt;">Условия бронирования:</p>
-                                <div style="white-space: pre-wrap; line-height: 1.3; font-size: 9pt;">${this.state.bookingTerms}</div>
+                            <div style="margin-top: 0.8cm; padding: 12pt; background: #f9fafb; border: 1px solid #ddd;">
+                                <p style="margin: 0 0 8pt 0; font-weight: 700; font-size: 10pt;">Условия бронирования:</p>
+                                <div style="line-height: 1.4; font-size: 9pt;">${this.state.bookingTerms}</div>
                             </div>
                         ` : ''}
 
@@ -10245,7 +10368,7 @@
                                         ${servicesWithoutDays.map(service => `
                                             <tr>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; line-height: 1.2;">
-                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #666; font-size: 8pt;">' + service.description + '</small>' : ''}
+                                                    <strong>${service.displayName}</strong>${service.description && service.description !== service.displayName ? '<br><small style="color: #000; font-size: 8pt;">' + service.description + '</small>' : ''}
                                                 </td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: center;">${service.quantity}</td>
                                                 <td style="padding: 4pt 5pt; border: 1px solid #ddd; text-align: right; font-weight: 600;">${service.displayPrice.toLocaleString()}</td>
@@ -10253,7 +10376,7 @@
                                         `).join('')}
                                     </tbody>
                                 </table>
-                                <p style="margin-top: 0.2cm; color: #666; font-size: 7.5pt; font-style: italic; line-height: 1.2;">
+                                <p style="margin-top: 0.2cm; color: #000; font-size: 7.5pt; font-style: italic; line-height: 1.2;">
                                     * Данные услуги включены в основную стоимость тура и не привязаны к конкретным дням программы (перелёты, визы, страховки, и т.д.)
                                 </p>
                             </div>
@@ -10261,14 +10384,14 @@
 
                         ${this.state.optionalServices && this.state.optionalServices.length > 0 ? `
                             <div style="margin-top: 0.8cm; padding-top: 0.4cm; border-top: 2px dashed #aaa;">
-                                <h3 style="margin: 0 0 0.2cm 0; color: #666; font-size: 11pt; font-weight: 600;">Опциональные услуги (на выбор):</h3>
+                                <h3 style="margin: 0 0 0.2cm 0; color: #000; font-size: 11pt; font-weight: 600;">Опциональные услуги (на выбор):</h3>
                                 <table style="width: 100%; border-collapse: collapse; font-size: 8pt;">
                                     <thead>
                                         <tr style="background: #f5f5f5;">
-                                            <th style="padding: 3pt 4pt; border: 1px solid #ccc; text-align: left; width: 60%; font-weight: 600;">Услуга</th>
-                                            <th style="padding: 3pt 4pt; border: 1px solid #ccc; text-align: center; width: 12%; font-weight: 600;">День</th>
-                                            <th style="padding: 3pt 4pt; border: 1px solid #ccc; text-align: center; width: 8%; font-weight: 600;">Кол.</th>
-                                            <th style="padding: 3pt 4pt; border: 1px solid #ccc; text-align: right; width: 20%; font-weight: 600;">Цена</th>
+                                            <th style="padding: 3pt 4pt; border: 1px solid #ddd; text-align: left; width: 60%; font-weight: 600;">Услуга</th>
+                                            <th style="padding: 3pt 4pt; border: 1px solid #ddd; text-align: center; width: 12%; font-weight: 600;">День</th>
+                                            <th style="padding: 3pt 4pt; border: 1px solid #ddd; text-align: center; width: 8%; font-weight: 600;">Кол.</th>
+                                            <th style="padding: 3pt 4pt; border: 1px solid #ddd; text-align: right; width: 20%; font-weight: 600;">Цена</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -10290,7 +10413,7 @@
                                         }).join('')}
                                     </tbody>
                                 </table>
-                                <p style="margin-top: 0.2cm; color: #666; font-size: 7.5pt; font-style: italic; line-height: 1.2;">
+                                <p style="margin-top: 0.2cm; color: #000; font-size: 7.5pt; font-style: italic; line-height: 1.2;">
                                     * Опциональные услуги оплачиваются дополнительно и не входят в основную стоимость тура
                                 </p>
                             </div>
