@@ -1,6 +1,6 @@
 {
   "name": "quote-calculator",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Quote Calculator with server-side storage",
   "main": "server.js",
   "scripts": {
