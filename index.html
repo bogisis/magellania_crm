@@ -4799,6 +4799,25 @@
                                         </div>
                                     </div>
 
+                                    <div class="form-row" style="margin-bottom: calc(var(--spacing) * 1); flex-wrap: wrap; row-gap: calc(var(--spacing) * 0.75); border-top: 1px solid #f3f4f6; padding-top: calc(var(--spacing) * 1);">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">⏰ Начало:</label>
+                                            <input type="time" class="input service-field" data-field="startTime" data-service-id="${service.id}" value="${service.startTime || ''}" style="width: 90px; font-size: 11px; padding: 4px 6px;">
+                                        </div>
+
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">Окончание:</label>
+                                            <input type="time" class="input service-field" data-field="endTime" data-service-id="${service.id}" value="${service.endTime || ''}" style="width: 90px; font-size: 11px; padding: 4px 6px;">
+                                        </div>
+
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="font-size: 10px; color: var(--gray-500);">Длительность:</span>
+                                            <span style="font-size: 11px; font-weight: 500; color: var(--gray-700);" id="duration-${service.id}">
+                                                ${this.calculateDuration(service.startTime, service.endTime)}
+                                            </span>
+                                        </div>
+                                    </div>
+
                                     <div class="form-row" style="margin-bottom: 0; align-items: center; flex-wrap: wrap; row-gap: calc(var(--spacing) * 1);">
                                         <label style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--gray-600); white-space: nowrap;">
                                             <input type="checkbox" class="checkbox service-exclude-checkbox" data-service-id="${service.id}" ${service.excludeFromMarkup ? 'checked' : ''} title="Выключить наценку для этой услуги">
@@ -5164,6 +5183,40 @@
                 return withMarkup;
             }
 
+            calculateDuration(startTime, endTime) {
+                if (!startTime || !endTime) {
+                    return '—';
+                }
+
+                try {
+                    const [startHours, startMinutes] = startTime.split(':').map(Number);
+                    const [endHours, endMinutes] = endTime.split(':').map(Number);
+
+                    const startTotalMinutes = startHours * 60 + startMinutes;
+                    const endTotalMinutes = endHours * 60 + endMinutes;
+
+                    let durationMinutes = endTotalMinutes - startTotalMinutes;
+
+                    // Handle overnight services
+                    if (durationMinutes < 0) {
+                        durationMinutes += 24 * 60;
+                    }
+
+                    const hours = Math.floor(durationMinutes / 60);
+                    const minutes = durationMinutes % 60;
+
+                    if (hours === 0) {
+                        return `${minutes} мин`;
+                    } else if (minutes === 0) {
+                        return `${hours} ч`;
+                    } else {
+                        return `${hours} ч ${minutes} мин`;
+                    }
+                } catch (e) {
+                    return '—';
+                }
+            }
+
             handleEdit(element) {
                 const field = element.dataset.field;
                 const serviceId = element.dataset.id;
@@ -5198,6 +5251,14 @@
                     service[field] = Math.max(0, parseFloat(value) || 0);
                 } else {
                     service[field] = value;
+                }
+
+                // Update duration display if time fields changed
+                if (field === 'startTime' || field === 'endTime') {
+                    const durationElement = document.getElementById(`duration-${serviceId}`);
+                    if (durationElement) {
+                        durationElement.textContent = this.calculateDuration(service.startTime, service.endTime);
+                    }
                 }
 
                 // Validate
