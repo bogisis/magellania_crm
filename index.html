@@ -1971,9 +1971,9 @@
 
                                 <label style="font-size: 11px; color: #9ca3af;">Сортировка:</label>
                                 <select id="services-sort-by" class="input" style="width: auto; min-width: 120px; font-size: 10px; padding: 4px 8px; height: 26px;" onchange="QuoteCalc.handleServicesSortChange()">
-                                    <option value="order">По порядку</option>
+                                    <option value="order">Отсутствует</option>
                                     <option value="region">По региону → по дням</option>
-                                    <option value="day">По дням тура</option>
+                                    <option value="day" selected>По дням тура</option>
                                     <option value="contractor">По подрядчикам</option>
                                 </select>
                                 <button class="btn btn-sm" onclick="QuoteCalc.toggleSortDirection()" id="sort-direction-btn" title="Изменить направление сортировки" style="padding: 4px 8px; font-size: 12px; height: 26px; background: #f3f4f6; color: #6b7280;">↑</button>
@@ -2629,7 +2629,7 @@
                     isQuoteSaved: true, // Флаг сохранения
                     lastSaveFolder: '', // Последняя папка сохранения
                     lastLoadFolder: '', // Последняя папка загрузки
-                    servicesSortBy: 'order', // order, day, contractor
+                    servicesSortBy: 'day', // day по умолчанию, order (отсутствует), region, contractor
                     servicesSortDirection: 'asc', // asc, desc
                     // ===== VIEW MODE STATE - Режим отображения услуг =====
                     servicesViewMode: 'cards', // 'cards' - карточки (по умолчанию), 'table' - таблица
