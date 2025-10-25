@@ -1914,6 +1914,22 @@
                         </div>
                     </div>
 
+                    <!-- Места проживания под катом -->
+                    <div class="collapsible" id="accommodations-section">
+                        <div class="collapsible-header" onclick="QuoteCalc.toggleAccommodations()">
+                            <span class="collapsible-header-title">
+                                🏨 Места проживания
+                                <span style="font-size: 0.85em; color: #999; font-weight: normal;">(авто-расчет ночей)</span>
+                            </span>
+                            <span class="collapsible-toggle">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <div class="collapsible-content-inner" id="accommodations-container">
+                                <!-- Динамически генерируется на основе услуг с днями -->
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Комментарии под катом -->
                     <div class="collapsible" id="quote-comments-section">
                         <div class="collapsible-header" onclick="QuoteCalc.toggleQuoteComments()">
@@ -2621,6 +2637,7 @@
                     clientEmail: '',
                     quoteDescription: '',
                     programDescription: '', // Описание программы для печати
+                    accommodations: {}, // { regionName: { hotels: ['hotel1', 'hotel2'], nights: 3 } }
                     activeCategory: 'all',
                     selectedServices: new Set(), // For bulk operations
                     saveFolder: '', // Выбранная папка для сохранения
@@ -3151,6 +3168,7 @@
                 this.initVersionDisplay();
                 this.restoreProgramDescriptionState();
                 this.restoreQuoteCommentsState();
+                this.restoreAccommodationsState();
                 this.loadSavedCatalogFolder();
                 this.initChecklistEvents(); // Инициализация событий чеклиста
 
@@ -3678,6 +3696,245 @@
                 localStorage.setItem('quoteCalc_quoteCommentsExpanded', isExpanded);
             }
 
+            toggleAccommodations() {
+                const section = document.getElementById('accommodations-section');
+                const content = section.querySelector('.collapsible-content');
+                const inner = section.querySelector('.collapsible-content-inner');
+
+                section.classList.toggle('expanded');
+                const isExpanded = section.classList.contains('expanded');
+
+                if (isExpanded) {
+                    // Пересчитываем и отрисовываем при раскрытии
+                    this.calculateAndRenderAccommodations();
+
+                    // Устанавливаем высоту секции
+                    const height = inner.scrollHeight;
+                    content.style.maxHeight = height + 'px';
+                } else {
+                    content.style.maxHeight = '0';
+                }
+
+                // Сохраняем состояние в localStorage
+                localStorage.setItem('quoteCalc_accommodationsExpanded', isExpanded);
+            }
+
+            calculateAndRenderAccommodations() {
+                // 1. Получаем все услуги с назначенными днями
+                const servicesWithDays = this.state.services.filter(s => s.day && s.day > 0);
+
+                if (servicesWithDays.length === 0) {
+                    this.state.accommodations = {};
+                    this.renderAccommodations();
+                    return;
+                }
+
+                // 2. Группируем по дням
+                const servicesByDay = {};
+                servicesWithDays.forEach(service => {
+                    if (!servicesByDay[service.day]) {
+                        servicesByDay[service.day] = [];
+                    }
+                    servicesByDay[service.day].push(service);
+                });
+
+                // 3. Определяем регион для каждого дня (вектор движения)
+                const dayRegions = {}; // { day: regionName }
+                let previousRegion = null;
+
+                Object.keys(servicesByDay).sort((a, b) => parseInt(a) - parseInt(b)).forEach(day => {
+                    const services = servicesByDay[day];
+                    const regionsInDay = [...new Set(services.map(s => s.region).filter(r => r))];
+
+                    if (regionsInDay.length === 0) {
+                        // Нет региона - используем предыдущий
+                        dayRegions[day] = previousRegion;
+                    } else if (regionsInDay.length === 1) {
+                        // Один регион - остаемся там
+                        dayRegions[day] = regionsInDay[0];
+                    } else {
+                        // Несколько регионов - выбираем новый (вектор движения)
+                        const newRegion = regionsInDay.find(r => r !== previousRegion);
+                        dayRegions[day] = newRegion || regionsInDay[regionsInDay.length - 1];
+                    }
+
+                    previousRegion = dayRegions[day];
+                });
+
+                // 4. Подсчитываем ночи по регионам
+                const accommodationsByRegion = {}; // { regionName: { nights: N, firstDay: X, lastDay: Y } }
+
+                const sortedDays = Object.keys(dayRegions).sort((a, b) => parseInt(a) - parseInt(b));
+                let currentRegion = null;
+                let regionStartDay = null;
+
+                sortedDays.forEach((day, index) => {
+                    const region = dayRegions[day];
+
+                    if (!region) return;
+
+                    if (region !== currentRegion) {
+                        // Регион изменился - завершаем предыдущий
+                        if (currentRegion && regionStartDay !== null) {
+                            const prevDay = parseInt(sortedDays[index - 1]);
+                            const nights = prevDay - regionStartDay; // Количество ночей = последний день - первый день
+
+                            if (!accommodationsByRegion[currentRegion]) {
+                                accommodationsByRegion[currentRegion] = { nights: 0, firstDay: regionStartDay, lastDay: prevDay };
+                            } else {
+                                accommodationsByRegion[currentRegion].nights += nights;
+                                accommodationsByRegion[currentRegion].lastDay = prevDay;
+                            }
+                        }
+
+                        currentRegion = region;
+                        regionStartDay = parseInt(day);
+                    }
+
+                    // Последний день - завершаем текущий регион
+                    if (index === sortedDays.length - 1 && currentRegion) {
+                        const lastDay = parseInt(day);
+                        const nights = lastDay - regionStartDay; // Количество ночей = последний день - первый день
+
+                        if (!accommodationsByRegion[currentRegion]) {
+                            accommodationsByRegion[currentRegion] = { nights: nights, firstDay: regionStartDay, lastDay: lastDay };
+                        } else {
+                            accommodationsByRegion[currentRegion].nights += nights;
+                            accommodationsByRegion[currentRegion].lastDay = lastDay;
+                        }
+                    }
+                });
+
+                // 5. Обновляем state.accommodations
+                const currentRegions = Object.keys(accommodationsByRegion);
+
+                // Удаляем регионы, которых больше нет
+                Object.keys(this.state.accommodations).forEach(region => {
+                    if (!currentRegions.includes(region)) {
+                        delete this.state.accommodations[region];
+                    }
+                });
+
+                // Добавляем новые регионы или обновляем ночи
+                currentRegions.forEach(region => {
+                    if (!this.state.accommodations[region]) {
+                        this.state.accommodations[region] = {
+                            hotels: [''], // Один пустой отель по умолчанию
+                            nights: accommodationsByRegion[region].nights
+                        };
+                    } else {
+                        // Обновляем количество ночей
+                        this.state.accommodations[region].nights = accommodationsByRegion[region].nights;
+                    }
+                });
+
+                // 6. Отрисовываем
+                this.renderAccommodations();
+            }
+
+            renderAccommodations() {
+                const container = document.getElementById('accommodations-container');
+                if (!container) return;
+
+                const regions = Object.keys(this.state.accommodations);
+
+                if (regions.length === 0) {
+                    container.innerHTML = '<div style="padding: 12px; text-align: center; color: #999; font-size: 12px;">Добавьте услуги и назначьте дни для автоматического расчета мест проживания</div>';
+                    return;
+                }
+
+                let html = '';
+                regions.forEach(region => {
+                    const data = this.state.accommodations[region];
+                    const nights = data.nights;
+                    const hotels = data.hotels || [''];
+
+                    html += `
+                        <div style="margin-bottom: 16px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="font-weight: 500; font-size: 12px; color: var(--gray-700);">
+                                    📍 ${region}
+                                </div>
+                                <div style="font-size: 11px; color: #6b7280; background: white; padding: 2px 8px; border-radius: 4px;">
+                                    ${nights} ${nights === 1 ? 'ночь' : nights < 5 ? 'ночи' : 'ночей'}
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                ${hotels.map((hotel, index) => `
+                                    <div style="display: flex; gap: 6px; align-items: center;">
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            placeholder="Название отеля"
+                                            value="${hotel || ''}"
+                                            data-region="${region}"
+                                            data-index="${index}"
+                                            onchange="QuoteCalc.updateHotelName(this)"
+                                            style="flex: 1; font-size: 11px; padding: 6px 10px;"
+                                        >
+                                        ${hotels.length > 1 ? `
+                                            <button
+                                                class="btn btn-sm"
+                                                onclick="QuoteCalc.removeHotel('${region}', ${index})"
+                                                style="padding: 6px 10px; font-size: 11px; background: #fee; color: #c00;"
+                                                title="Удалить отель"
+                                            >×</button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                                ${hotels.length < 3 ? `
+                                    <button
+                                        class="btn btn-sm"
+                                        onclick="QuoteCalc.addHotel('${region}')"
+                                        style="padding: 6px 10px; font-size: 11px; background: #f0f9ff; color: #0284c7; margin-top: 4px;"
+                                    >+ Добавить отель</button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            }
+
+            addHotel(region) {
+                if (!this.state.accommodations[region]) return;
+
+                const hotels = this.state.accommodations[region].hotels;
+                if (hotels.length >= 3) {
+                    this.showNotification('Максимум 3 отеля на регион', true);
+                    return;
+                }
+
+                hotels.push('');
+                this.renderAccommodations();
+                this.scheduleUpdate();
+            }
+
+            removeHotel(region, index) {
+                if (!this.state.accommodations[region]) return;
+
+                const hotels = this.state.accommodations[region].hotels;
+                if (hotels.length <= 1) {
+                    this.showNotification('Должен остаться хотя бы один отель', true);
+                    return;
+                }
+
+                hotels.splice(index, 1);
+                this.renderAccommodations();
+                this.scheduleUpdate();
+            }
+
+            updateHotelName(input) {
+                const region = input.dataset.region;
+                const index = parseInt(input.dataset.index);
+
+                if (!this.state.accommodations[region]) return;
+
+                this.state.accommodations[region].hotels[index] = input.value;
+                this.scheduleUpdate();
+            }
+
             restoreProgramDescriptionState() {
                 const section = document.getElementById('program-description-section');
                 const content = section.querySelector('.collapsible-content');
@@ -3719,6 +3976,25 @@
                     // Устанавливаем динамическую высоту
                     const height = inner.scrollHeight;
                     content.style.maxHeight = height + 'px';
+                }
+            }
+
+            restoreAccommodationsState() {
+                const section = document.getElementById('accommodations-section');
+                const content = section.querySelector('.collapsible-content');
+                const inner = section.querySelector('.collapsible-content-inner');
+                const savedState = localStorage.getItem('quoteCalc_accommodationsExpanded');
+
+                // По умолчанию свернут
+                if (savedState === 'true') {
+                    section.classList.add('expanded');
+                    // Пересчитываем и отрисовываем
+                    this.calculateAndRenderAccommodations();
+                    // Устанавливаем динамическую высоту
+                    setTimeout(() => {
+                        const height = inner.scrollHeight;
+                        content.style.maxHeight = height + 'px';
+                    }, 50);
                 }
             }
 
@@ -5101,6 +5377,12 @@
                     } else {
                         partnerCommissionRow.style.display = 'none';
                     }
+                }
+
+                // Update accommodations if section is expanded
+                const accommodationsSection = document.getElementById('accommodations-section');
+                if (accommodationsSection && accommodationsSection.classList.contains('expanded')) {
+                    this.calculateAndRenderAccommodations();
                 }
 
                 // Save to localStorage automatically
@@ -7318,6 +7600,7 @@
                             clientEmail: this.state.clientEmail,
                             quoteComments: this.state.quoteComments,
                             programDescription: this.state.programDescription,
+                            accommodations: this.state.accommodations,
                             hiddenMarkup: this.state.hiddenMarkup,
                             partnerCommission: this.state.partnerCommission
                         },
@@ -7480,6 +7763,7 @@
                             clientEmail: this.state.clientEmail,
                             quoteComments: this.state.quoteComments,
                             programDescription: this.state.programDescription,
+                            accommodations: this.state.accommodations,
                             hiddenMarkup: this.state.hiddenMarkup,
                             partnerCommission: this.state.partnerCommission
                         },
@@ -9508,6 +9792,7 @@
                         // ВАЖНО: используем ?? вместо || чтобы пустые строки не заменялись на старые значения
                         this.state.programDescription = data.programDescription ?? '';
                         this.state.quoteComments = data.quoteComments ?? '';
+                        this.state.accommodations = data.accommodations || {};
                         this.state.currentQuoteFile = filename;
                         // ВАЖНО: Устанавливаем ID сметы из файла
                         this.state.currentQuoteId = data.id || '';
