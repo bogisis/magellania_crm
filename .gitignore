@@ -23,3 +23,7 @@ catalog/*.json
 
 # Logs
 *.log
+# Игнорировать nested git repos в invoice_exampes (reference code)
+invoice/invoice_exampes/invoice/
+invoice/invoice_exampes/easy-invoice-pdf/
+invoice/invoice_exampes/invoice-generator-api/
