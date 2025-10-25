@@ -1947,40 +1947,43 @@
                     </div>
                 </div>
 
-                <!-- Add Service Button & Services Filters -->
-                <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 10px; margin-top: 12px;">
-                    <button class="btn btn-sm btn-primary" onclick="QuoteCalc.showServiceModal()" style="padding: 4px 10px; font-size: 11px;">+ Добавить услугу</button>
+                <!-- STICKY CONTROLS CONTAINER -->
+                <div id="sticky-controls-wrapper" style="position: sticky; top: 0; z-index: 100; background: white; padding: 12px 0; margin: 0 -16px; padding-left: 16px; padding-right: 16px; border-bottom: 1px solid #e5e7eb;">
+                    <!-- Add Service Button & Services Filters -->
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 10px;">
+                        <button class="btn btn-sm btn-primary" onclick="QuoteCalc.showServiceModal()" style="padding: 4px 10px; font-size: 11px;">+ Добавить услугу</button>
 
-                    <div id="services-filters" style="display: none; flex: 1;">
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <!-- VIEW MODE TOGGLE - iOS Style Switch -->
-                            <!-- Переключатель режимов отображения: карточки / таблица -->
-                            <div class="view-mode-toggle-container">
-                                <span class="view-mode-label">Карточки</span>
-                                <label class="ios-switch">
-                                    <input type="checkbox" id="view-mode-checkbox" onchange="QuoteCalc.toggleViewMode()">
-                                    <span class="ios-slider"></span>
-                                </label>
-                                <span class="view-mode-label">Таблица</span>
+                        <div id="services-filters" style="display: none; flex: 1;">
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <!-- VIEW MODE TOGGLE - iOS Style Switch -->
+                                <!-- Переключатель режимов отображения: карточки / таблица -->
+                                <div class="view-mode-toggle-container">
+                                    <span class="view-mode-label">Карточки</span>
+                                    <label class="ios-switch">
+                                        <input type="checkbox" id="view-mode-checkbox" onchange="QuoteCalc.toggleViewMode()">
+                                        <span class="ios-slider"></span>
+                                    </label>
+                                    <span class="view-mode-label">Таблица</span>
+                                </div>
+
+                                <!-- Разделитель -->
+                                <div style="width: 1px; height: 20px; background: #e5e7eb; margin: 0 4px;"></div>
+
+                                <label style="font-size: 11px; color: #9ca3af;">Сортировка:</label>
+                                <select id="services-sort-by" class="input" style="width: auto; min-width: 120px; font-size: 10px; padding: 4px 8px; height: 26px;" onchange="QuoteCalc.handleServicesSortChange()">
+                                    <option value="order">По порядку</option>
+                                    <option value="region">По региону → по дням</option>
+                                    <option value="day">По дням тура</option>
+                                    <option value="contractor">По подрядчикам</option>
+                                </select>
+                                <button class="btn btn-sm" onclick="QuoteCalc.toggleSortDirection()" id="sort-direction-btn" title="Изменить направление сортировки" style="padding: 4px 8px; font-size: 12px; height: 26px; background: #f3f4f6; color: #6b7280;">↑</button>
                             </div>
-
-                            <!-- Разделитель -->
-                            <div style="width: 1px; height: 20px; background: #e5e7eb; margin: 0 4px;"></div>
-
-                            <label style="font-size: 11px; color: #9ca3af;">Сортировка:</label>
-                            <select id="services-sort-by" class="input" style="width: auto; min-width: 120px; font-size: 10px; padding: 4px 8px; height: 26px;" onchange="QuoteCalc.handleServicesSortChange()">
-                                <option value="order">По порядку</option>
-                                <option value="region">По региону → по дням</option>
-                                <option value="day">По дням тура</option>
-                                <option value="contractor">По подрядчикам</option>
-                            </select>
-                            <button class="btn btn-sm" onclick="QuoteCalc.toggleSortDirection()" id="sort-direction-btn" title="Изменить направление сортировки" style="padding: 4px 8px; font-size: 12px; height: 26px; background: #f3f4f6; color: #6b7280;">↓</button>
                         </div>
                     </div>
-                </div>
 
-                <!-- Bulk Controls Container -->
-                <div id="bulk-controls-container"></div>
+                    <!-- Bulk Controls Container -->
+                    <div id="bulk-controls-container"></div>
+                </div>
 
                 <div id="services-list"></div>
 
@@ -9033,7 +9036,7 @@
 
                 const btn = document.getElementById('sort-direction-btn');
                 if (btn) {
-                    btn.textContent = this.state.servicesSortDirection === 'asc' ? '↓' : '↑';
+                    btn.textContent = this.state.servicesSortDirection === 'asc' ? '↑' : '↓';
                 }
 
                 this.applySortToServices();
@@ -9048,7 +9051,7 @@
                 if (select) select.value = 'order';
 
                 const btn = document.getElementById('sort-direction-btn');
-                if (btn) btn.textContent = '↓';
+                if (btn) btn.textContent = '↑';
 
                 this.renderServices();
                 this.showNotification('Сортировка сброшена');
