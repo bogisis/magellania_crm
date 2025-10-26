@@ -18,10 +18,11 @@ app.use(express.static('.'));
 const CATALOG_DIR = path.join(__dirname, isTestMode ? '__test_catalog__' : 'catalog');
 const ESTIMATE_DIR = path.join(__dirname, isTestMode ? '__test_estimate__' : 'estimate');
 const BACKUP_DIR = path.join(__dirname, isTestMode ? '__test_backup__' : 'backup');
+const SETTINGS_DIR = path.join(__dirname, isTestMode ? '__test_settings__' : 'settings');
 
 // Создание директорий при старте
 async function ensureDirs() {
-    for (const dir of [CATALOG_DIR, ESTIMATE_DIR, BACKUP_DIR]) {
+    for (const dir of [CATALOG_DIR, ESTIMATE_DIR, BACKUP_DIR, SETTINGS_DIR]) {
         try {
             await fs.mkdir(dir, { recursive: true });
         } catch (err) {
@@ -300,6 +301,49 @@ app.post('/api/backups/:id/restore', async (req, res) => {
     }
 });
 
+// ============ API для настроек ============
+
+// Загрузить глобальные настройки
+app.get('/api/settings', async (req, res) => {
+    try {
+        const filepath = path.join(SETTINGS_DIR, 'settings.json');
+        const data = await fs.readFile(filepath, 'utf8');
+        res.json({ success: true, data: JSON.parse(data) });
+    } catch (err) {
+        // Если файл не существует, возвращаем дефолтные настройки
+        if (err.code === 'ENOENT') {
+            const defaultSettings = {
+                bookingTerms: '',
+                version: '1.0.0'
+            };
+            res.json({ success: true, data: defaultSettings });
+        } else {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
+});
+
+// Сохранить глобальные настройки
+app.post('/api/settings', async (req, res) => {
+    try {
+        const filepath = path.join(SETTINGS_DIR, 'settings.json');
+        const data = req.body;
+
+        // Бэкап перед сохранением (если файл существует)
+        try {
+            const existing = await fs.readFile(filepath, 'utf8');
+            await createBackup('settings', 'settings.json', JSON.parse(existing));
+        } catch (err) {
+            // Файл не существует, это первое сохранение
+        }
+
+        await fs.writeFile(filepath, JSON.stringify(data, null, 2));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ============ API для транзакционного сохранения ============
 
 // Подготовка транзакции - сохранение во временные файлы
@@ -456,6 +500,7 @@ app.get('/health', async (req, res) => {
             catalog: false,
             estimate: false,
             backup: false,
+            settings: false,
             uptime: process.uptime(),
             timestamp: new Date().toISOString()
         };
@@ -482,7 +527,14 @@ app.get('/health', async (req, res) => {
             checks.backup = false;
         }
 
-        const healthy = checks.catalog && checks.estimate && checks.backup;
+        try {
+            await fs.access(SETTINGS_DIR);
+            checks.settings = true;
+        } catch (err) {
+            checks.settings = false;
+        }
+
+        const healthy = checks.catalog && checks.estimate && checks.backup && checks.settings;
 
         res.status(healthy ? 200 : 503).json({
             status: healthy ? 'healthy' : 'unhealthy',

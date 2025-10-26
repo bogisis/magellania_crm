@@ -341,6 +341,26 @@ class APIClient {
         }, 8000); // 8 секунд
     }
 
+    // ============ Настройки ============
+
+    async loadSettings() {
+        const response = await fetch(`${this.baseURL}/api/settings`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        return result.data;
+    }
+
+    async saveSettings(data) {
+        const response = await fetch(`${this.baseURL}/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        return result;
+    }
+
     // ============ Утилиты ============
 
     getCurrentFilename() {

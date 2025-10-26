@@ -13,6 +13,8 @@ backup/*
 estimate/*.json
 catalog/*.json
 !catalog/catalog.json
+settings/*.json
+!settings/.gitkeep
 
 # IDE
 .vscode/

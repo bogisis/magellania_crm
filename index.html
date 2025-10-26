@@ -11,9 +11,6 @@
     <!-- Quill.js Rich Text Editor -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
-    <!-- Quill Better Table Module -->
-    <link href="https://unpkg.com/quill-better-table@1.2.10/dist/quill-better-table.css" rel="stylesheet">
-    <script src="https://unpkg.com/quill-better-table@1.2.10/dist/quill-better-table.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -215,12 +212,17 @@
             font-size: 11px;
         }
 
-        /* Tooltips для кнопок редактора */
-        .quill-editor-container .ql-toolbar button::after,
-        .quill-editor-container .ql-toolbar .ql-picker-label::after {
+        /* Кастомные tooltips для редактора - быстрые и красивые */
+        .quill-editor-container .ql-toolbar button,
+        .quill-editor-container .ql-toolbar .ql-picker-label {
+            position: relative;
+        }
+
+        .quill-editor-container .ql-toolbar button[data-tooltip]::after,
+        .quill-editor-container .ql-toolbar .ql-picker-label[data-tooltip]::after {
             content: attr(data-tooltip);
             position: absolute;
-            bottom: 100%;
+            bottom: calc(100% + 4px);
             left: 50%;
             transform: translateX(-50%);
             background: #1e293b;
@@ -231,15 +233,17 @@
             white-space: nowrap;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s;
-            margin-bottom: 4px;
+            transition: opacity 0.15s ease-in-out;
             z-index: 1000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        .quill-editor-container .ql-toolbar button:hover::after,
-        .quill-editor-container .ql-toolbar .ql-picker-label:hover::after {
+        .quill-editor-container .ql-toolbar button[data-tooltip]:hover::after,
+        .quill-editor-container .ql-toolbar .ql-picker-label[data-tooltip]:hover::after {
             opacity: 1;
+            transition-delay: 0.2s; /* Небольшая задержка перед появлением */
         }
+
 
         .form-row {
             display: flex;
@@ -2807,6 +2811,12 @@
                     autosave: null
                 };
 
+                // Timeout для сохранения глобальных настроек
+                this.globalSettingsSaveTimeout = null;
+
+                // Храним состояние раскрытых секций деталей в чеклисте
+                this.expandedChecklistDetails = new Set();
+
                 this.state = {
                     services: [],
                     optionalServices: [], // Опциональные услуги (не входят в основную смету)
@@ -2947,6 +2957,50 @@
                     this.updateCalculations();
                     this.updatePending = false;
                 });
+            }
+
+            // Загрузить глобальные настройки при инициализации
+            async loadGlobalSettings() {
+                try {
+                    const settings = await window.apiClient.loadSettings();
+                    console.log('[Settings] Загружены глобальные настройки:', settings);
+
+                    // Если есть сохраненные условия бронирования, применяем их только если текущие пусты
+                    if (settings.bookingTerms && !this.state.bookingTerms) {
+                        this.state.bookingTerms = settings.bookingTerms;
+
+                        // Обновляем редактор если он уже инициализирован
+                        if (this.quillEditors && this.quillEditors.bookingTerms) {
+                            this.quillEditors.bookingTerms.root.innerHTML = settings.bookingTerms;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[Settings] Не удалось загрузить настройки:', err.message);
+                    // Не показываем ошибку пользователю - это не критично
+                }
+            }
+
+            // Отложенное сохранение глобальных настроек (debounce 3 секунды)
+            scheduleGlobalSettingsSave() {
+                if (this.globalSettingsSaveTimeout) {
+                    clearTimeout(this.globalSettingsSaveTimeout);
+                }
+
+                this.globalSettingsSaveTimeout = setTimeout(async () => {
+                    try {
+                        const settings = {
+                            bookingTerms: this.state.bookingTerms || '',
+                            version: '1.0.0',
+                            lastUpdated: new Date().toISOString()
+                        };
+
+                        await window.apiClient.saveSettings(settings);
+                        console.log('[Settings] Глобальные настройки сохранены');
+                    } catch (err) {
+                        console.error('[Settings] Ошибка сохранения настроек:', err.message);
+                        // Не показываем ошибку пользователю - автосохранение не критично
+                    }
+                }, 3000); // 3 секунды
             }
 
             showNotification(message, isError = false) {
@@ -3361,6 +3415,7 @@
                 this.loadExternalCatalog();
                 this.bindEvents();
                 this.initQuillEditors(); // Инициализация WYSIWYG редакторов
+                this.loadGlobalSettings(); // Загрузка глобальных настроек (условия бронирования)
                 this.bindKeyboardShortcuts();
                 this.updateCalculations();
                 // loadFromLocalStorage теперь async (загружает автосохранение с сервера)
@@ -3765,16 +3820,38 @@
                 detailsContent.className = 'checklist-details-content';
                 detailsContent.style.cssText = 'max-height: 0; overflow: hidden; transition: max-height 0.3s ease;';
 
-                toggleBtn.addEventListener('click', () => {
+                // Останавливаем всплытие ВСЕХ событий из detailsContent чтобы не срабатывал toggle
+                detailsContent.addEventListener('click', (e) => e.stopPropagation());
+                detailsContent.addEventListener('mousedown', (e) => e.stopPropagation());
+                detailsContent.addEventListener('mouseup', (e) => e.stopPropagation());
+                detailsContent.addEventListener('keydown', (e) => e.stopPropagation());
+                detailsContent.addEventListener('keyup', (e) => e.stopPropagation());
+                detailsContent.addEventListener('input', (e) => e.stopPropagation());
+                detailsContent.addEventListener('change', (e) => e.stopPropagation());
+
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Останавливаем всплытие от кнопки тоже
                     const isExpanded = detailsContent.style.maxHeight && detailsContent.style.maxHeight !== '0px';
                     if (isExpanded) {
                         detailsContent.style.maxHeight = '0';
                         toggleBtn.querySelector('.toggle-icon').textContent = '▶';
+                        // Удаляем из Set раскрытых секций
+                        this.expandedChecklistDetails.delete(service.id);
                     } else {
-                        detailsContent.style.maxHeight = detailsContent.scrollHeight + 'px';
+                        // Используем большое фиксированное значение вместо scrollHeight
+                        // чтобы избежать проблем с изменяющимся контентом
+                        detailsContent.style.maxHeight = '500px';
                         toggleBtn.querySelector('.toggle-icon').textContent = '▼';
+                        // Добавляем в Set раскрытых секций
+                        this.expandedChecklistDetails.add(service.id);
                     }
                 });
+
+                // Автоматически раскрываем секцию если она была раскрыта до перерисовки
+                if (this.expandedChecklistDetails.has(service.id)) {
+                    detailsContent.style.maxHeight = '500px';
+                    toggleBtn.querySelector('.toggle-icon').textContent = '▼';
+                }
 
                 card.appendChild(toggleBtn);
 
@@ -3805,7 +3882,7 @@
                 startTimeInput.addEventListener('change', () => {
                     service.startTime = startTimeInput.value;
                     this.saveToLocalStorage();
-                    this.renderServices(); // Обновляем конструктор смет
+                    this.markQuoteAsUnsaved();
                 });
                 startTimeWrap.appendChild(startTimeLabel);
                 startTimeWrap.appendChild(startTimeInput);
@@ -3822,7 +3899,7 @@
                 endTimeInput.addEventListener('change', () => {
                     service.endTime = endTimeInput.value;
                     this.saveToLocalStorage();
-                    this.renderServices(); // Обновляем конструктор смет
+                    this.markQuoteAsUnsaved();
                 });
                 endTimeWrap.appendChild(endTimeLabel);
                 endTimeWrap.appendChild(endTimeInput);
@@ -3944,8 +4021,10 @@
             }
 
             initNewSectionsEvents() {
+                console.log('[EVENTS] initNewSectionsEvents() called');
                 // Универсальная функция для обработки событий секций
                 const initSectionEvents = (container, arrayName, renderFunc, type) => {
+                    console.log(`[EVENTS] initSectionEvents for type: ${type}, arrayName: ${arrayName}, renderFunc: ${renderFunc.name}`);
                     if (!container) return;
 
                     // Click events
@@ -4008,10 +4087,12 @@
 
                         // Timing toggle button
                         if (e.target.closest(`.${type}-timing-toggle-btn`)) {
+                            console.log(`[CONSTRUCTOR] Timing toggle clicked for ${type}-${serviceId}`);
                             const timingContent = document.getElementById(`${type}-timing-${serviceId}`);
                             const icon = e.target.closest(`.${type}-timing-toggle-btn`).querySelector('.timing-toggle-icon');
                             if (timingContent) {
                                 const isHidden = timingContent.style.maxHeight === '0px' || !timingContent.style.maxHeight;
+                                console.log(`[CONSTRUCTOR] Toggle: ${isHidden ? 'expanding' : 'collapsing'}`);
                                 timingContent.style.maxHeight = isHidden ? '200px' : '0';
                                 if (icon) icon.textContent = isHidden ? '▼' : '▶';
                             }
@@ -4044,6 +4125,8 @@
                         // Input fields
                         if (e.target.classList.contains(`${type}-field`)) {
                             const field = e.target.dataset.field;
+                            console.log(`[CONSTRUCTOR] Field changed: ${field}, value: ${e.target.value}, type: ${type}, serviceId: ${serviceId}`);
+
                             if (['price', 'quantity', 'markup', 'prepayment', 'day', 'roomsCount'].includes(field)) {
                                 service[field] = parseFloat(e.target.value) || 0;
                             } else {
@@ -4051,13 +4134,25 @@
                             }
 
                             // Update duration if startTime or endTime changed
+                            // НЕ перерисовываем карточку для полей времени - только обновляем duration
                             if (field === 'startTime' || field === 'endTime') {
+                                console.log(`[CONSTRUCTOR] Time field detected - updating duration ONLY, NO RERENDER`);
                                 const durationEl = document.getElementById(`${type}-duration-${serviceId}`);
                                 if (durationEl) {
                                     durationEl.textContent = this.calculateDuration(service.startTime, service.endTime);
+                                    console.log(`[CONSTRUCTOR] Duration updated to: ${durationEl.textContent}`);
+                                } else {
+                                    console.warn(`[CONSTRUCTOR] Duration element not found: ${type}-duration-${serviceId}`);
                                 }
+                                // Только обновляем расчёты, НЕ перерисовываем
+                                this.scheduleUpdate();
+                                this.markQuoteAsUnsaved();
+                                console.log(`[CONSTRUCTOR] Time field change complete - NO RERENDER called`);
+                                return;
                             }
 
+                            console.log(`[CONSTRUCTOR] Non-time field - calling RERENDER`);
+                            console.trace('[CONSTRUCTOR] Stack trace for renderFunc call:');
                             renderFunc.call(this);
                             this.scheduleUpdate();
                             this.markQuoteAsUnsaved();
@@ -4288,6 +4383,7 @@
             // ===== НОВЫЕ СЕКЦИИ: Отели, Перелёты, Прочие услуги =====
 
             renderHotels() {
+                console.log('[RENDER] renderHotels() called');
                 const container = document.getElementById('hotels-list');
                 if (!container) return;
 
@@ -4301,6 +4397,7 @@
             }
 
             renderFlights() {
+                console.log('[RENDER] renderFlights() called');
                 const container = document.getElementById('flights-list');
                 if (!container) return;
 
@@ -4314,6 +4411,7 @@
             }
 
             renderOtherServices() {
+                console.log('[RENDER] renderOtherServices() called');
                 const container = document.getElementById('other-services-list');
                 if (!container) return;
 
@@ -4629,14 +4727,9 @@
             }
 
             initQuillEditors() {
-                // Регистрация модуля таблиц (если доступен)
-                if (window.QuillBetterTable) {
-                    Quill.register({
-                        'modules/better-table': window.QuillBetterTable.default
-                    }, true);
-                }
+                console.log('[Quill] Инициализация редакторов...');
 
-                // Конфигурация тулбара с поддержкой таблиц
+                // Конфигурация тулбара
                 const toolbarOptions = [
                     [{ 'header': [1, 2, 3, false] }],
                     ['bold', 'italic', 'underline', 'strike'],
@@ -4647,11 +4740,6 @@
                     ['clean']
                 ];
 
-                // Добавляем кнопку таблицы если модуль доступен
-                if (window.QuillBetterTable) {
-                    toolbarOptions.push([{ 'table': 'table' }]);
-                }
-
                 const editorConfig = {
                     theme: 'snow',
                     modules: {
@@ -4659,44 +4747,29 @@
                     }
                 };
 
-                // Добавляем модуль таблиц если доступен
-                if (window.QuillBetterTable) {
-                    editorConfig.modules['better-table'] = {
-                        operationMenu: {
-                            items: {
-                                unmergeCells: { text: 'Разъединить ячейки' },
-                                insertColumnRight: { text: 'Вставить столбец справа' },
-                                insertColumnLeft: { text: 'Вставить столбец слева' },
-                                insertRowUp: { text: 'Вставить строку сверху' },
-                                insertRowDown: { text: 'Вставить строку снизу' },
-                                removeCol: { text: 'Удалить столбец' },
-                                removeRow: { text: 'Удалить строку' },
-                                removeTable: { text: 'Удалить таблицу' }
-                            }
-                        }
-                    };
-                }
-
                 // Инициализация редактора для описания программы
+                console.log('[Quill] Создаём programDescEditor...');
                 const programDescEditor = new Quill('#program-description-editor', {
                     ...editorConfig,
                     placeholder: 'Описание программы тура для клиента'
                 });
+                console.log('[Quill] programDescEditor создан');
 
                 // Инициализация редактора для условий (quote-description)
+                console.log('[Quill] Создаём quoteDescEditor...');
                 const quoteDescEditor = new Quill('#quote-description-editor', {
                     ...editorConfig,
                     placeholder: 'Внутренние заметки, пожелания клиента, важная информация'
                 });
+                console.log('[Quill] quoteDescEditor создан');
 
                 // Инициализация редактора для условий бронирования
+                console.log('[Quill] Создаём bookingTermsEditor...');
                 const bookingTermsEditor = new Quill('#booking-terms-editor', {
                     ...editorConfig,
                     placeholder: 'Условия бронирования, сроки оплаты, правила отмены...'
                 });
-
-                // Добавляем tooltips к кнопкам после инициализации
-                this.addQuillTooltips();
+                console.log('[Quill] bookingTermsEditor создан');
 
                 // Сохраняем ссылки на редакторы
                 this.quillEditors = {
@@ -4727,6 +4800,8 @@
                     document.getElementById('booking-terms').value = html;
                     this.state.bookingTerms = html;
                     this.markQuoteAsUnsaved();
+                    // Автосохранение глобальных настроек
+                    this.scheduleGlobalSettingsSave();
                 });
 
                 // Загружаем сохранённые данные в редакторы
@@ -4739,35 +4814,70 @@
                 if (this.state.bookingTerms) {
                     bookingTermsEditor.root.innerHTML = this.state.bookingTerms;
                 }
+
+                // Добавляем tooltips сразу к DOM элементам редакторов
+                // Используем querySelector напрямую на контейнерах редакторов
+                this.addQuillTooltips();
             }
 
             addQuillTooltips() {
+                console.log('[Tooltips] Начинаем добавление tooltips...');
+
                 // Tooltips для всех кнопок редактора
                 const tooltips = {
-                    '.ql-bold': 'Жирный (Ctrl+B)',
-                    '.ql-italic': 'Курсив (Ctrl+I)',
-                    '.ql-underline': 'Подчёркнутый (Ctrl+U)',
-                    '.ql-strike': 'Зачёркнутый',
-                    '.ql-header[value="1"]': 'Заголовок 1',
-                    '.ql-header[value="2"]': 'Заголовок 2',
-                    '.ql-header[value="3"]': 'Заголовок 3',
-                    '.ql-list[value="ordered"]': 'Нумерованный список',
-                    '.ql-list[value="bullet"]': 'Маркированный список',
-                    '.ql-indent[value="-1"]': 'Уменьшить отступ',
-                    '.ql-indent[value="+1"]': 'Увеличить отступ',
-                    '.ql-align': 'Выравнивание',
-                    '.ql-link': 'Вставить ссылку',
-                    '.ql-clean': 'Очистить форматирование',
-                    '.ql-table': 'Вставить таблицу'
+                    'bold': 'Жирный (Ctrl+B)',
+                    'italic': 'Курсив (Ctrl+I)',
+                    'underline': 'Подчёркнутый (Ctrl+U)',
+                    'strike': 'Зачёркнутый',
+                    'header': 'Заголовок',
+                    'list': 'Список',
+                    'indent': 'Отступ',
+                    'align': 'Выравнивание',
+                    'link': 'Вставить ссылку',
+                    'clean': 'Очистить форматирование'
                 };
 
-                // Применяем tooltips ко всем редакторам
-                document.querySelectorAll('.quill-editor-container .ql-toolbar').forEach(toolbar => {
-                    Object.keys(tooltips).forEach(selector => {
-                        const button = toolbar.querySelector(selector);
-                        if (button) {
-                            button.setAttribute('title', tooltips[selector]);
+                // Находим все контейнеры редакторов
+                const editorContainers = ['#program-description-editor', '#quote-description-editor', '#booking-terms-editor'];
+
+                let totalButtons = 0;
+                editorContainers.forEach((containerId, index) => {
+                    const container = document.querySelector(containerId);
+                    if (!container) {
+                        console.warn(`[Tooltips] Контейнер ${containerId} не найден`);
+                        return;
+                    }
+
+                    const toolbar = container.previousElementSibling; // Тулбар обычно перед редактором
+                    if (!toolbar || !toolbar.classList.contains('ql-toolbar')) {
+                        // Пробуем найти внутри родителя
+                        const parent = container.parentElement;
+                        const toolbarInside = parent ? parent.querySelector('.ql-toolbar') : null;
+
+                        if (toolbarInside) {
+                            console.log(`[Tooltips] Найден тулбар внутри родителя для ${containerId}`);
+                            this.applyTooltipsToToolbar(toolbarInside, tooltips);
+                            totalButtons += Object.keys(tooltips).length;
+                        } else {
+                            console.warn(`[Tooltips] Тулбар не найден для ${containerId}`);
                         }
+                    } else {
+                        console.log(`[Tooltips] Найден тулбар рядом с ${containerId}`);
+                        this.applyTooltipsToToolbar(toolbar, tooltips);
+                        totalButtons += Object.keys(tooltips).length;
+                    }
+                });
+
+                console.log('[Tooltips] Всего tooltips добавлено:', totalButtons);
+            }
+
+            applyTooltipsToToolbar(toolbar, tooltips) {
+                // Применяем tooltips к кнопкам в тулбаре
+                Object.keys(tooltips).forEach(format => {
+                    const buttons = toolbar.querySelectorAll(`.ql-${format}`);
+                    buttons.forEach(button => {
+                        // Используем стандартный title для надежности
+                        button.setAttribute('title', tooltips[format]);
                     });
                 });
             }
@@ -6200,6 +6310,7 @@
             }
 
             updateServiceField(serviceId, field, value) {
+                console.log(`[CHECKLIST] updateServiceField called: ${field}, value: ${value}, serviceId: ${serviceId}`);
                 const service = this.state.services.find(s => s.id === serviceId);
                 if (!service) return;
 
@@ -6212,11 +6323,19 @@
                 }
 
                 // Update duration display if time fields changed
+                // НЕ перерисовываем для полей времени - только обновляем duration
                 if (field === 'startTime' || field === 'endTime') {
+                    console.log(`[CHECKLIST] Time field detected - updating duration ONLY, NO RERENDER`);
                     const durationElement = document.getElementById(`duration-${serviceId}`);
                     if (durationElement) {
                         durationElement.textContent = this.calculateDuration(service.startTime, service.endTime);
+                        console.log(`[CHECKLIST] Duration updated to: ${durationElement.textContent}`);
                     }
+                    // Только обновляем расчёты, НЕ перерисовываем
+                    this.scheduleUpdate();
+                    this.markQuoteAsUnsaved();
+                    console.log(`[CHECKLIST] Time field change complete - NO RERENDER called`);
+                    return; // ВАЖНО: ранний выход, не вызываем renderServices()
                 }
 
                 // Validate
@@ -6225,6 +6344,7 @@
                     this.showNotification(errors[0], true);
                 }
 
+                console.log(`[CHECKLIST] Non-time field - calling RERENDER`);
                 this.renderServices();
                 this.scheduleUpdate();
                 this.markQuoteAsUnsaved();
@@ -10294,7 +10414,7 @@
                         if (days.length > 1) {
                             tableRows += `
                                 <tr style="background: #e5e7eb;">
-                                    <td colspan="4" style="padding: 8pt; border: 2px solid #333; font-weight: 700; text-align: center; font-size: 10pt;">
+                                    <td colspan="3" style="padding: 8pt; border: 2px solid #333; font-weight: 700; text-align: center; font-size: 10pt;">
                                         День ${day}${dateDisplay}
                                     </td>
                                 </tr>
@@ -10323,10 +10443,6 @@
 
                             tableRows += `
                                 <tr>
-                                    <td style="padding: 5pt; border: 1px solid #ddd; text-align: center; font-size: 9pt;">
-                                        День ${service.day}<br>
-                                        <small style="color: #000; font-size: 8pt;">${calendarDate || ''}</small>
-                                    </td>
                                     <td style="padding: 5pt; border: 1px solid #ddd; font-size: 9.5pt; line-height: 1.2;">
                                         <strong>${service.displayName}</strong>${timeInfo}<br>
                                         <small style="color: #000; font-size: 8.5pt; line-height: 1.1;">${service.description}</small><br>
@@ -10342,7 +10458,7 @@
                         if (dayIndex < days.length - 1) {
                             tableRows += `
                                 <tr>
-                                    <td colspan="4" style="padding: 4pt; border: none;"></td>
+                                    <td colspan="3" style="padding: 4pt; border: none;"></td>
                                 </tr>
                             `;
                         }
@@ -10353,8 +10469,8 @@
                         ${this.state.tourStart ? `<p><strong>Даты тура:</strong> ${this.formatDate(this.state.tourStart)} ${this.state.tourEnd ? '- ' + this.formatDate(this.state.tourEnd) : ''}</p>` : ''}
                         ${this.state.clientName ? `<p><strong>Заказчик:</strong> ${this.state.clientName}</p>` : ''}
                         ${this.state.clientPhone ? `<p><strong>Контакты:</strong> ${this.state.clientPhone} ${this.state.clientEmail ? ', ' + this.state.clientEmail : ''}</p>` : ''}
-                        ${this.state.programDescription ? `
-                            <div style="margin: 0.5cm 0; padding: 12pt; background: #f9fafb; border: 1px solid #ddd;">
+                        ${this.state.programDescription && this.state.programDescription.replace(/<[^>]*>/g, '').trim() ? `
+                            <div style="margin: 0.5cm 0; padding: 12pt; background: #f9fafb;">
                                 <p style="margin: 0 0 8pt 0; font-weight: 700; font-size: 10pt;">Описание программы:</p>
                                 <div style="line-height: 1.4; font-size: 9.5pt;">${this.state.programDescription}</div>
                             </div>
@@ -10363,7 +10479,6 @@
                         <table style="width: 100%; border-collapse: collapse; margin: 0.5cm 0;">
                             <thead>
                                 <tr style="background: #f5f5f5;">
-                                    <th style="padding: 6pt; border: 1px solid #ddd; font-size: 9.5pt; font-weight: 600;">День</th>
                                     <th style="padding: 6pt; border: 1px solid #ddd; font-size: 9.5pt; font-weight: 600;">Услуга</th>
                                     <th style="padding: 6pt; border: 1px solid #ddd; font-size: 9.5pt; font-weight: 600;">Кол-во</th>
                                     <th style="padding: 6pt; border: 1px solid #ddd; font-size: 9.5pt; font-weight: 600;">Стоимость</th>
