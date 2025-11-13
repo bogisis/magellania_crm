@@ -1,0 +1,54 @@
+# Quote Calculator v3.0 - Development Docker Compose
+# Для локальной разработки с hot-reload
+
+version: '3.8'
+
+services:
+  quote-calculator-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev  # Development stage
+      args:
+        NODE_VERSION: 18
+
+    container_name: quote-calculator-dev
+
+    # Port mapping
+    ports:
+      - "4000:4000"
+
+    # Environment variables для development
+    environment:
+      - NODE_ENV=development
+      - STORAGE_TYPE=sqlite
+      - DUAL_WRITE_MODE=true
+      - LOG_LEVEL=debug
+      - LOG_CONSOLE=true
+
+    # Volumes для development (bind mounts для hot-reload)
+    volumes:
+      # Code (для hot-reload) - исключаем node_modules
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+
+      # Persistent data
+      - ./db:/usr/src/app/db
+      - ./logs:/usr/src/app/logs
+      - ./catalogs:/usr/src/app/catalogs
+      - ./estimate:/usr/src/app/estimate
+      - ./backup:/usr/src/app/backup
+
+    # Restart policy для dev
+    restart: on-failure
+
+    # Команда с nodemon для hot-reload (опционально)
+    # command: npx nodemon server-with-db.js
+
+    # Networks
+    networks:
+      - quote-calculator-dev-network
+
+networks:
+  quote-calculator-dev-network:
+    driver: bridge

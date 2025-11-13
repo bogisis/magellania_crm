@@ -1,0 +1,246 @@
+site_name: Quote Calculator v2.3.0
+site_description: Генератор коммерческих предложений для туристического бизнеса
+site_author: Quote Calculator Team
+site_url: https://example.com  # Замените на реальный URL
+
+# Repository
+repo_name: quote-calculator
+repo_url: https://github.com/yourorg/quote-calculator  # Замените на реальный URL
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright &copy; 2024-2025 Quote Calculator Team
+
+# Theme configuration
+theme:
+  name: material
+  language: ru
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Переключить в темную тему
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Переключить в светлую тему
+
+  features:
+    - navigation.instant      # Мгновенная навигация
+    - navigation.tracking     # URL tracking
+    - navigation.tabs         # Верхние табы
+    - navigation.tabs.sticky  # Закрепленные табы
+    - navigation.sections     # Секции в боковом меню
+    - navigation.expand       # Раскрыть все секции
+    - navigation.indexes      # Index pages
+    - navigation.top          # Кнопка "Наверх"
+    - search.suggest          # Подсказки при поиске
+    - search.highlight        # Подсветка результатов
+    - search.share           # Поделиться поиском
+    - content.code.copy      # Копирование кода
+    - content.code.annotate  # Аннотации в коде
+    - content.tabs.link      # Связанные табы
+
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/calculator
+
+# Plugins
+plugins:
+  - search:
+      lang:
+        - ru
+        - en
+  # i18n plugin disabled for now - enable when English translation is ready
+  # - i18n:
+  #     default_language: ru
+  #     docs_structure: folder
+  #     languages:
+  #       - locale: ru
+  #         name: Русский
+  #         build: true
+  #         default: true
+  #       - locale: en
+  #         name: English
+  #         build: true
+  #     nav_translations:
+  #       en:
+  #         Руководство пользователя: User Guide
+  #         Установка: Installation
+  #         Начало работы: Getting Started
+  #         Работа со сметами: Working with Estimates
+  #         Каталоги: Catalogs
+  #         Дополнительные возможности: Advanced Features
+  #         Советы и хитрости: Tips and Tricks
+  #         Решение проблем: Troubleshooting
+  #         Руководство разработчика: Developer Guide
+  #         Начало работы (dev): Getting Started
+  #         Архитектура: Architecture
+  #         Справочник API: API Reference
+  #         Разработка: Development
+  #         Функционал: Features
+  #         Развертывание: Deployment
+  #         Целостность данных: Data Integrity
+  #         История изменений: History
+
+# Extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Additional CSS (optional - create if needed)
+# extra_css:
+#   - stylesheets/extra.css
+
+# Additional JavaScript (optional - create if needed)
+# extra_js:
+#   - javascripts/extra.js
+
+# Extra configuration
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yourorg/quote-calculator
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+
+# Navigation structure
+nav:
+  - Главная: index.md
+
+  - Руководство пользователя:
+    - ru/user-guide/index.md
+    - Установка:
+      - ru/user-guide/installation/index.md
+      - ru/user-guide/installation/local.md
+      - ru/user-guide/installation/docker.md
+      - ru/user-guide/installation/requirements.md
+    - Начало работы:
+      - ru/user-guide/getting-started/index.md
+      - ru/user-guide/getting-started/first-estimate.md
+      - ru/user-guide/getting-started/interface.md
+    - Работа со сметами:
+      - ru/user-guide/working-with-estimates/index.md
+      - ru/user-guide/working-with-estimates/creating.md
+      - ru/user-guide/working-with-estimates/editing.md
+      - ru/user-guide/working-with-estimates/calculations.md
+      - ru/user-guide/working-with-estimates/printing.md
+    - Каталоги:
+      - ru/user-guide/catalogs/index.md
+      - ru/user-guide/catalogs/managing.md
+      - ru/user-guide/catalogs/import-export.md
+    - Дополнительные возможности:
+      - ru/user-guide/advanced-features/index.md
+      - ru/user-guide/advanced-features/bulk-operations.md
+      - ru/user-guide/advanced-features/templates.md
+      - ru/user-guide/advanced-features/backup-restore.md
+    - Советы и хитрости:
+      - ru/user-guide/tips-and-tricks/index.md
+      - ru/user-guide/tips-and-tricks/keyboard-shortcuts.md
+      - ru/user-guide/tips-and-tricks/workflows.md
+    - Решение проблем:
+      - ru/user-guide/troubleshooting/index.md
+      - ru/user-guide/troubleshooting/common-issues.md
+      - ru/user-guide/troubleshooting/faq.md
+
+  - Руководство разработчика:
+    - ru/developer-guide/index.md
+    - Начало работы:
+      - ru/developer-guide/getting-started/index.md
+      - ru/developer-guide/getting-started/setup.md
+      - ru/developer-guide/getting-started/project-structure.md
+    - Архитектура:
+      - ru/developer-guide/architecture/index.md
+      - ru/developer-guide/architecture/overview.md
+      - ru/developer-guide/architecture/frontend.md
+      - ru/developer-guide/architecture/backend.md
+      - ru/developer-guide/architecture/storage.md
+    - Справочник API:
+      - ru/developer-guide/api-reference/index.md
+      - ru/developer-guide/api-reference/estimates.md
+      - ru/developer-guide/api-reference/catalogs.md
+      - ru/developer-guide/api-reference/backups.md
+    - Разработка:
+      - ru/developer-guide/development/index.md
+      - ru/developer-guide/development/workflow.md
+      - ru/developer-guide/development/testing.md
+      - ru/developer-guide/development/debugging.md
+    - Функционал:
+      - ru/developer-guide/features/index.md
+      - ru/developer-guide/features/calculations.md
+      - ru/developer-guide/features/autosave.md
+      - ru/developer-guide/features/bulk-operations.md
+    - Развертывание:
+      - ru/developer-guide/deployment/index.md
+      - Настройка VPS: ru/developer-guide/deployment/vps-setup.md
+      - Конфигурация: ru/developer-guide/deployment/configuration.md
+      - SSL сертификаты: ru/developer-guide/deployment/ssl.md
+      - Миграция БД: ru/developer-guide/deployment/database-migration.md
+      - Workflow: ru/developer-guide/deployment/workflow.md
+      - Мониторинг: ru/developer-guide/deployment/monitoring.md
+      - Решение проблем: ru/developer-guide/deployment/troubleshooting.md
+      - Production (legacy): ru/developer-guide/deployment/production.md
+      - Docker (legacy): ru/developer-guide/deployment/docker.md
+      - Migration (legacy): ru/developer-guide/deployment/migration.md
+    - Целостность данных:
+      - ru/developer-guide/data-integrity/index.md
+      - ru/developer-guide/data-integrity/id-first-pattern.md
+      - ru/developer-guide/data-integrity/single-source-truth.md
+      - ru/developer-guide/data-integrity/data-flow.md
+    - Решение проблем:
+      - ru/developer-guide/troubleshooting/index.md
+      - ru/developer-guide/troubleshooting/debugging.md
+      - ru/developer-guide/troubleshooting/common-errors.md
+    - История изменений:
+      - ru/developer-guide/history/index.md
+      - ru/developer-guide/history/changelog.md
+      - ru/developer-guide/history/migrations.md

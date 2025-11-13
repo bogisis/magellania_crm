@@ -1,0 +1,86 @@
+# Quote Calculator v3.0 - Production Docker Compose
+# Extends base docker-compose.yml and adds nginx reverse proxy
+# For local production deployment with HTTP (no SSL)
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Features:
+#   - Nginx reverse proxy with security headers
+#   - Rate limiting for API endpoints
+#   - Gzip compression
+#   - HTTP/2 support (when SSL is configured)
+#   - Production-ready logging
+#   - Resource limits
+#   - Auto-restart policies
+
+version: '3.8'
+
+services:
+  # ========== NGINX REVERSE PROXY ==========
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: quote-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx configuration
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+      # SSL certificates (create self-signed for testing, or use Let's Encrypt)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+      # Basic auth (optional)
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+
+      # Logs
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - quote-production
+    restart: unless-stopped
+    networks:
+      - quote-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ========== BACKEND (from base docker-compose.yml) ==========
+  # Override to remove port exposure (nginx handles it now)
+  quote-production:
+    ports: []  # Remove port 4000 exposure - nginx handles it
+    networks:
+      - quote-network
+
+# ========== NETWORKS ==========
+networks:
+  quote-network:
+    driver: bridge
+    name: quote-prod-network
+
+# ========== VOLUMES ==========
+volumes:
+  nginx-logs:
+    name: quote-nginx-logs
+    labels:
+      environment: production
+      backup: optional

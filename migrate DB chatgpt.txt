@@ -1,0 +1,173 @@
+"Даты тура: 4 января 2026 г. - 5 января 2026 г. Количество человек: 6"
+Хорошо — посмотрел файл (Quote Calculator / CLAUDE.md) — видно, что сейчас всё хранится файлами (estimate/, backup/, catalog/, localStorage) и есть явные риски рассинхронизации и гонок при autosave. 
+
+Ниже — честный, практичный план и конкретные решения, как уйти от файловой системы к базе данных, чтобы сохранить логику продукта и убрать текущие риски. Я даю вариант «быстро и надёжно» (рекомендую) и альтернативы для специальных случаев.
+
+# Краткое решение (рекомендация)
+
+1. Основная БД — **PostgreSQL** (production-ready, ACID, JSONB для гибких схем).
+2. Для быстрых transient операций (autosave, locks) — **Redis** (резервирование, rate limiting, optimistic locks).
+3. Для больших бинарных/документных файлов (PDF, вложения) — объектное хранилище (S3 / MinIO) + в базе ссылка на объект.
+4. Внедрить слой абстракции `StorageAdapter` (FileStorage → DBStorage). Это даёт плавный откат и постепенную миграцию.
+
+Почему Postgres: транзакции решают проблему dual save/рассинхронизации, JSONB сохраняет гибкость текущих JSON-файлов, полнотекст — встроен, множество опций для индексации и репликации.
+
+# Модель данных — пример (микросхема)
+
+Я опираюсь на существующие сущности в проекте: estimates (сметы), catalogs (каталоги услуг/шаблоны), backups, templates, config/settings, users, audit/versioning. Привожу минимальные таблицы.
+
+```sql
+-- Основные сущности
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  email TEXT UNIQUE,
+  name TEXT,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE catalogs (
+  id UUID PRIMARY KEY,
+  name TEXT,
+  version TEXT,
+  payload JSONB,          -- полная структура каталога (legacy + v1.1)
+  owner_id UUID REFERENCES users(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE estimates (
+  id UUID PRIMARY KEY,
+  filename TEXT,          -- для совместимости с UI
+  version TEXT,
+  pax_count INT,
+  owner_id UUID REFERENCES users(id),
+  data JSONB,             -- весь объект сметы (services, metadata)
+  preview TEXT,           -- текст/калькуляция для быстрого поиска
+  state TEXT,             -- draft, published, archived
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  data_hash TEXT,         -- checksum для детекции изменений
+  lock_owner TEXT         -- для optimistic lock / editing
+);
+
+CREATE TABLE backups (
+  id UUID PRIMARY KEY,
+  ref_table TEXT,         -- 'estimates'|'catalogs'
+  ref_id UUID,
+  payload JSONB,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value JSONB,
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Audit / history (для undo/redo)
+CREATE TABLE audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  entity TEXT,
+  entity_id UUID,
+  action TEXT,            -- 'update','create','delete'
+  payload JSONB,
+  user_id UUID,
+  created_at timestamptz DEFAULT now()
+);
+```
+
+Пояснения:
+
+* `JSONB` хранит текущие сложные структуры (оставляем гибкость). По мере зрелости можно разложить в нормальные поля.
+* `data_hash` + `updated_at` помогают обнаруживать конфликтные изменения (optimistic locking).
+* `lock_owner` — для временных блокировок при редактировании из UI (с TTL в Redis).
+
+# Техническая стратегия миграции — пошагово (практически)
+
+1. **Абстракция хранения** — внедрить интерфейс `StorageAdapter`:
+
+   * методы: `saveEstimate(id, data)`, `loadEstimate(id)`, `listEstimates()`, `saveCatalog()...`
+   * реализовать сначала `FileStorage` (существующий) и новую реализацию `PostgresStorage`.
+     Это даёт возможность переключать бекенд без рефакторинга UI.
+
+2. **Запуск БД локально** (dev): Postgres + Redis + MinIO/локальный S3. Написать миграции (Flyway / knex / sequelize-migrations).
+
+3. **Миграционный скрипт**:
+
+   * Скрипт читает все файлы из estimate/, catalog/, backup/.
+   * Для каждой сущности: валидирует JSON (версия), сохраняет в таблицу, создаёт backup запись.
+   * При импорте вычислять `data_hash` (например SHA256) и сохранять `created_at`/`updated_at` по метаданным файла.
+   * Логировать неудачные записи в отдельный CSV / папку `migration_errors/` для ручной проверки.
+
+4. **Режим двойной записи (rollout)**:
+
+   * На период миграции добавить фонового воркера: при сохранении — писать и в файлы (для rollback), и в БД. Логику «успех/откат» делать транзакционной со стороны сервера.
+   * Переход UI: переключить API на `DBStorage` по флагу feature-flag. Оставить файловую реализацию на read-only некоторое время.
+
+5. **Автотесты и валидация**:
+
+   * Тест миграции: выбрать 100 рандомных смет и сверить JSON → DB → JSON (bytewise или data_hash)
+   * Инструмент для проверки совместимости форматов v1.0 ↔ v1.1 (везде, где уже есть dual parser)
+
+6. **Locking / Concurrency**:
+
+   * Для autosave/duplicate services: использовать транзакции Postgres + Redis locks.
+   * На UI — держать optimistic locking: отправлять `data_hash` при сохранении; сервер отклоняет, если hash устарел, и возвращает diff / 409 Conflict.
+
+7. **Search / full-text**:
+
+   * Если нужен быстрый поиск по тексту — использовать Postgres `GIN` индекс по `payload ->> 'service_name'` или `tsvector` на `preview`. При больших объёмах — отдельный Elasticsearch.
+
+8. **Backups & DR**:
+
+   * Настроить регулярные дампы Postgres, snapshot S3 для файлов, и репликацию (read replica) при росте нагрузки.
+
+9. **Отказ от файловой системы**:
+
+   * После 1–3 недель работы на БД и успешной валидации, удалить write-to-files, оставить read-only архивы и затем архивировать/удалить.
+
+# Архитектурные улучшения (решают текущие pain points)
+
+* Транзакционный save для estimate + backup (вместо двух отдельных файлов).
+* Centralized versioning: таблица `settings` с `DATA_SCHEMA_VERSION` — миграции меньше риска.
+* Audit logs для undo/redo требуются сразу (вьюшки истории для бэкапа и проверки расчётов).
+* Изоляция бизнес-логики расчётов (updateCalculations) в серверном модуле — тогда меньше риск, что UI autosave «прилипает».
+
+# Примеры API (минимум)
+
+* `GET /api/estimates` — list (pagination)
+* `GET /api/estimates/:id` — load
+* `POST /api/estimates` — create (returns id, data_hash)
+* `PUT /api/estimates/:id` — update (requires data_hash for optimistic lock)
+* `POST /api/estimates/:id/backup` — create backup
+* `POST /api/estimates/:id/lock` — acquire lock (uses Redis TTL)
+* `DELETE /api/estimates/:id` — soft delete (state='archived')
+
+# Риски и как их снизить
+
+* **Риск рассинхронизации при миграции** — снижать через миграционный скрипт с верификацией и двойной записью.
+* **Падение производительности при больших JSONB** — распарсить горячие поля в колонки (например, service_count, pax_count) и индексировать.
+* **Сложность undo/redo** — хранить в `audit_logs` дельты, а не полные снимки (если объём большой).
+* **Требования к бэкапам и GDPR** — продумать retention для клиентов.
+
+# Конкретный план внедрения (микро-таймлайн, практично)
+
+1. День 0–2: поднять Postgres+Redis+MinIO на dev, написать миграционные схемы.
+2. День 3–5: реализовать `StorageAdapter` и `PostgresStorage` + unit tests.
+3. День 6–8: написать и прогнать миграционный скрипт (dry run на копии файлов).
+4. День 9–11: запустить режим dual-write (feature flag), интеграционное тестирование.
+5. День 12–14: переключить UI на DB-only, наблюдать; оставить файловый read-only архив.
+   (если хочется — могу сгенерировать конкретные SQL и миграционный скрипт прямо сейчас)
+
+# Что я могу сделать прямо сейчас (и что будет полезно)
+
+* Сгенерировать: 1) набор SQL-миграций (CREATE TABLE ...), 2) пример node.js скрипта для миграции JSON файлов → Postgres (псевдо/реальный код), 3) адаптер `StorageAdapter` (TypeScript/JS) и пример использования в вашем `apiClient`.
+* Написать `migration checklist` и тесты сравнения (hash + field checks).
+
+Скажи, хочешь ли ты чтобы я сразу сгенерировал:
+A) SQL-скрипты + Docker Compose для Postgres+Redis+MinIO,
+B) Node.js миграционный скрипт (читает estimate/, catalog/ и заливает в БД),
+C) Пример `StorageAdapter` + пример изменений в server.js чтобы подключить БД,
+или всё вместе — сделаю в одном ответе (с минимальной болтовнёй, только код и точные шаги).
+
+Я не буду приукрашивать: миграция — не мгновенная задача, но с правильным планом и тестами вы снимете главные боли (рассинхронизация, autosave race, отсутствие audit). Готов сделать следующий шаг прямо сейчас по твоему выбору.

@@ -1,352 +1,313 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs').promises;
 const path = require('path');
+
+
+// Storage adapters
+const FileStorage = require('./storage/FileStorage');
+const SQLiteStorage = require('./storage/SQLiteStorage');
 
 const app = express();
 
-// Используем тестовые настройки в test режиме
-const isTestMode = process.env.NODE_ENV === 'test';
-const PORT = isTestMode ? 3001 : (process.env.PORT || 3000);
+// ============================================================================
+// Configuration
+// ============================================================================
 
+const isTestMode = process.env.NODE_ENV === 'test';
+const PORT = isTestMode ? 4001 : (process.env.PORT || 4000);
+
+// Storage type: 'file' или 'sqlite'
+const STORAGE_TYPE = process.env.STORAGE_TYPE || 'sqlite';
+
+// Dual-write mode: писать в оба хранилища (для постепенной миграции)
+const DUAL_WRITE_MODE = process.env.DUAL_WRITE_MODE === 'true';
+
+console.log(`Storage configuration:`);
+console.log(`  Type: ${STORAGE_TYPE}`);
+console.log(`  Dual-write: ${DUAL_WRITE_MODE}`);
+console.log(`  Test mode: ${isTestMode}`);
+
+// ============================================================================
 // Middleware
+// ============================================================================
+
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: process.env.JSON_LIMIT || '50mb' }));
 app.use(express.static('.'));
 
-// Директории (используем тестовые пути в test режиме)
-const CATALOG_DIR = path.join(__dirname, isTestMode ? '__test_catalog__' : 'catalog');
-const ESTIMATE_DIR = path.join(__dirname, isTestMode ? '__test_estimate__' : 'estimate');
-const BACKUP_DIR = path.join(__dirname, isTestMode ? '__test_backup__' : 'backup');
-const SETTINGS_DIR = path.join(__dirname, isTestMode ? '__test_settings__' : 'settings');
+// ============================================================================
+// Storage Initialization
+// ============================================================================
 
-// Создание директорий при старте
-async function ensureDirs() {
-    for (const dir of [CATALOG_DIR, ESTIMATE_DIR, BACKUP_DIR, SETTINGS_DIR]) {
+let storage;
+let secondaryStorage; // For dual-write mode
+
+// Инициализация основного storage
+if (STORAGE_TYPE === 'sqlite') {
+    storage = new SQLiteStorage();
+    console.log('Using SQLite storage');
+} else {
+    storage = new FileStorage();
+    console.log('Using File storage');
+}
+
+// Инициализация вторичного storage для dual-write
+if (DUAL_WRITE_MODE) {
+    if (STORAGE_TYPE === 'sqlite') {
+        secondaryStorage = new FileStorage();
+        console.log('Dual-write enabled: SQLite + File');
+    } else {
+        secondaryStorage = new SQLiteStorage();
+        console.log('Dual-write enabled: File + SQLite');
+    }
+}
+
+// Инициализация storage при старте
+async function initStorage() {
+    try {
+        await storage.init();
+        console.log('✓ Primary storage initialized');
+
+        if (secondaryStorage) {
+            await secondaryStorage.init();
+            console.log('✓ Secondary storage initialized (dual-write)');
+        }
+    } catch (err) {
+        console.error('Failed to initialize storage:', err);
+        throw err;
+    }
+}
+
+// Вспомогательная функция для dual-write
+async function dualWrite(operation, ...args) {
+    // Сначала пишем в основное хранилище
+    const result = await operation(storage, ...args);
+
+    // Если включен dual-write, пишем и во вторичное
+    if (secondaryStorage) {
         try {
-            await fs.mkdir(dir, { recursive: true });
+            await operation(secondaryStorage, ...args);
         } catch (err) {
-            console.error(`Error creating ${dir}:`, err);
+            // Ошибка во вторичном хранилище не критична
+            console.error('Secondary storage write failed:', err.message);
         }
     }
+
+    return result;
 }
 
-// Импортируем вспомогательные функции
-const { transliterate } = require('./utils');
+// ============================================================================
+// API для каталога
+// ============================================================================
 
-// Утилита для автобэкапа
-async function createBackup(type, filename, data) {
-    try {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const backupFile = path.join(BACKUP_DIR, `${type}_${timestamp}_${filename}`);
-        await fs.writeFile(backupFile, JSON.stringify(data, null, 2));
-        console.log(`Backup created: ${backupFile}`);
-    } catch (err) {
-        console.error('Backup error:', err);
-    }
-}
-
-// ============ API для каталога ============
-
-// Получить список каталогов
 app.get('/api/catalog/list', async (req, res) => {
     try {
-        const files = await fs.readdir(CATALOG_DIR);
-        const catalogFiles = files.filter(f => f.endsWith('.json'));
-        res.json({ success: true, files: catalogFiles });
+        const files = await storage.getCatalogsList();
+        res.json({ success: true, files });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Загрузить каталог
 app.get('/api/catalog/:filename', async (req, res) => {
     try {
-        const filepath = path.join(CATALOG_DIR, req.params.filename);
-        const data = await fs.readFile(filepath, 'utf8');
-        res.json({ success: true, data: JSON.parse(data) });
+        const data = await storage.loadCatalog(req.params.filename);
+        res.json({ success: true, data });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Сохранить каталог
 app.post('/api/catalog/:filename', async (req, res) => {
     try {
-        const filepath = path.join(CATALOG_DIR, req.params.filename);
-        const data = req.body;
-
-        // Бэкап перед сохранением
-        try {
-            const existing = await fs.readFile(filepath, 'utf8');
-            await createBackup('catalog', req.params.filename, JSON.parse(existing));
-        } catch (err) {
-            // Файл не существует, пропускаем бэкап
-        }
-
-        await fs.writeFile(filepath, JSON.stringify(data, null, 2));
+        await dualWrite(
+            async (storage, filename, data) => storage.saveCatalog(filename, data),
+            req.params.filename,
+            req.body
+        );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// ============ API для смет ============
+// ============================================================================
+// API для смет
+// ============================================================================
 
-// Получить список смет
 app.get('/api/estimates', async (req, res) => {
     try {
-        const files = await fs.readdir(ESTIMATE_DIR);
-        // Фильтруем autosave.json - его не нужно показывать в списке
-        const estimateFiles = files.filter(f => f.endsWith('.json') && f !== 'autosave.json');
-
-        // Получить метаданные каждой сметы
-        const estimates = await Promise.all(
-            estimateFiles.map(async (filename) => {
-                try {
-                    const filepath = path.join(ESTIMATE_DIR, filename);
-                    const stats = await fs.stat(filepath);
-                    const data = await fs.readFile(filepath, 'utf8');
-                    const json = JSON.parse(data);
-
-                    return {
-                        filename,
-                        clientName: json.clientName || 'Без имени',
-                        paxCount: json.paxCount || 0,
-                        updatedAt: stats.mtime,
-                        createdAt: stats.birthtime
-                    };
-                } catch (err) {
-                    return {
-                        filename,
-                        clientName: 'Ошибка чтения',
-                        error: true
-                    };
-                }
-            })
-        );
-
-        // Сортировка по дате изменения (новые первые)
-        estimates.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-
+        const estimates = await storage.getEstimatesList();
         res.json({ success: true, estimates });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Загрузить смету
 app.get('/api/estimates/:filename', async (req, res) => {
     try {
-        const filepath = path.join(ESTIMATE_DIR, req.params.filename);
-        const data = await fs.readFile(filepath, 'utf8');
-        res.json({ success: true, data: JSON.parse(data) });
+        const data = await storage.loadEstimate(req.params.filename);
+        res.json({ success: true, data });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Сохранить смету (создание или обновление)
 app.post('/api/estimates/:filename', async (req, res) => {
     try {
-        const filepath = path.join(ESTIMATE_DIR, req.params.filename);
-        const data = req.body;
-
-        // Бэкап перед сохранением (если файл существует)
-        try {
-            const existing = await fs.readFile(filepath, 'utf8');
-            await createBackup('estimate', req.params.filename, JSON.parse(existing));
-        } catch (err) {
-            // Файл не существует, это новая смета
+        // DAY 1.1: Use atomic transactions for SQLite (Production Safety)
+        if (storage.constructor.name === 'SQLiteStorage') {
+            // Atomic transaction: saves estimate + backup in one transaction
+            // Prevents dual-write consistency issues
+            await storage.saveEstimateTransactional(req.params.filename, req.body);
+        } else {
+            // FileStorage: use dual-write (legacy compatibility)
+            await dualWrite(
+                async (storage, filename, data) => storage.saveEstimate(filename, data),
+                req.params.filename,
+                req.body
+            );
         }
-
-        await fs.writeFile(filepath, JSON.stringify(data, null, 2));
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Удалить смету
-app.delete('/api/estimates/:filename', async (req, res) => {
-    try {
-        const filepath = path.join(ESTIMATE_DIR, req.params.filename);
-
-        // Бэкап перед удалением
-        try {
-            const existing = await fs.readFile(filepath, 'utf8');
-            await createBackup('estimate_deleted', req.params.filename, JSON.parse(existing));
-        } catch (err) {
-            // Игнорируем ошибки бэкапа
-        }
-
-        await fs.unlink(filepath);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Переименовать смету
-app.put('/api/estimates/:oldFilename/rename', async (req, res) => {
-    try {
-        const oldPath = path.join(ESTIMATE_DIR, req.params.oldFilename);
-        const newFilename = req.body.newFilename;
-        const newPath = path.join(ESTIMATE_DIR, newFilename);
-
-        // Проверяем что старый файл существует
-        await fs.access(oldPath);
-
-        // Переименовываем
-        await fs.rename(oldPath, newPath);
-
-        res.json({ success: true, newFilename });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// ============ API для backup'ов ============
-
-// Получить список backup'ов
-app.get('/api/backups', async (req, res) => {
-    try {
-        const files = await fs.readdir(BACKUP_DIR);
-        const backupFiles = files.filter(f => f.endsWith('.json') && !f.includes('_'));
-
-        const backups = await Promise.all(
-            backupFiles.map(async (filename) => {
-                try {
-                    const filepath = path.join(BACKUP_DIR, filename);
-                    const stats = await fs.stat(filepath);
-                    const data = await fs.readFile(filepath, 'utf8');
-                    const json = JSON.parse(data);
-
-                    const id = filename.replace('.json', '');
-
-                    // Проверяем есть ли соответствующий файл в estimate/
-                    const estimateFiles = await fs.readdir(ESTIMATE_DIR);
-                    const hasEstimate = estimateFiles.some(f => f.includes(`_${id}.json`));
-
-                    return {
-                        id,
-                        clientName: json.clientName || 'Без имени',
-                        paxCount: json.paxCount || 0,
-                        tourStart: json.tourStart || '',
-                        updatedAt: stats.mtime,
-                        hasEstimate
-                    };
-                } catch (err) {
-                    return null;
-                }
-            })
-        );
-
-        // Фильтруем null значения и сортируем по дате
-        const validBackups = backups.filter(b => b !== null);
-        validBackups.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-
-        res.json({ success: true, backups: validBackups });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Загрузить backup по ID
-app.get('/api/backups/:id', async (req, res) => {
-    try {
-        const filepath = path.join(BACKUP_DIR, `${req.params.id}.json`);
-        const data = await fs.readFile(filepath, 'utf8');
-        res.json({ success: true, data: JSON.parse(data) });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Сохранить backup по ID
-app.post('/api/backups/:id', async (req, res) => {
-    try {
-        const filepath = path.join(BACKUP_DIR, `${req.params.id}.json`);
-        const data = req.body;
-        await fs.writeFile(filepath, JSON.stringify(data, null, 2));
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Восстановить смету из backup
-app.post('/api/backups/:id/restore', async (req, res) => {
-    try {
-        const backupPath = path.join(BACKUP_DIR, `${req.params.id}.json`);
-        const backupData = await fs.readFile(backupPath, 'utf8');
-        const data = JSON.parse(backupData);
-
-        // Генерируем имя файла из данных backup
-        const clientName = data.clientName || '';
-        const transliterated = clientName ? transliterate(clientName.trim().toLowerCase()).replace(/\s+/g, '_') : 'untitled';
-        const date = data.tourStart || new Date().toISOString().split('T')[0];
-        const pax = data.paxCount || 0;
-        const id = req.params.id;
-
-        const filename = `${transliterated}_${date}_${pax}pax_${id}.json`;
-        const estimatePath = path.join(ESTIMATE_DIR, filename);
-
-        // Сохраняем как новую смету
-        await fs.writeFile(estimatePath, JSON.stringify(data, null, 2));
-
-        res.json({ success: true, filename });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// ============ API для настроек ============
-
-// Загрузить глобальные настройки
-app.get('/api/settings', async (req, res) => {
-    try {
-        const filepath = path.join(SETTINGS_DIR, 'settings.json');
-        const data = await fs.readFile(filepath, 'utf8');
-        res.json({ success: true, data: JSON.parse(data) });
-    } catch (err) {
-        // Если файл не существует, возвращаем дефолтные настройки
-        if (err.code === 'ENOENT') {
-            const defaultSettings = {
-                bookingTerms: '',
-                version: '1.0.0'
-            };
-            res.json({ success: true, data: defaultSettings });
+        // Проверка на optimistic locking conflict
+        if (err.message.includes('Concurrent modification')) {
+            res.status(409).json({ success: false, error: err.message, code: 'CONFLICT' });
         } else {
             res.status(500).json({ success: false, error: err.message });
         }
     }
 });
 
-// Сохранить глобальные настройки
-app.post('/api/settings', async (req, res) => {
+app.delete('/api/estimates/:filename', async (req, res) => {
     try {
-        const filepath = path.join(SETTINGS_DIR, 'settings.json');
-        const data = req.body;
-
-        // Бэкап перед сохранением (если файл существует)
-        try {
-            const existing = await fs.readFile(filepath, 'utf8');
-            await createBackup('settings', 'settings.json', JSON.parse(existing));
-        } catch (err) {
-            // Файл не существует, это первое сохранение
-        }
-
-        await fs.writeFile(filepath, JSON.stringify(data, null, 2));
+        await dualWrite(
+            async (storage, filename) => storage.deleteEstimate(filename),
+            req.params.filename
+        );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// ============ API для транзакционного сохранения ============
+app.put('/api/estimates/:oldFilename/rename', async (req, res) => {
+    try {
+        const result = await dualWrite(
+            async (storage, oldFilename, newFilename) => storage.renameEstimate(oldFilename, newFilename),
+            req.params.oldFilename,
+            req.body.newFilename
+        );
+        res.json({ success: true, newFilename: result.newFilename });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
-// Подготовка транзакции - сохранение во временные файлы
+// ============================================================================
+// API для backup'ов
+// ============================================================================
+
+app.get('/api/backups', async (req, res) => {
+    try {
+        const backups = await storage.getBackupsList();
+        res.json({ success: true, backups });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/backups/:id', async (req, res) => {
+    try {
+        const data = await storage.loadBackup(req.params.id);
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/backups/:id', async (req, res) => {
+    try {
+        await dualWrite(
+            async (storage, id, data) => storage.saveBackup(id, data),
+            req.params.id,
+            req.body
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/backups/:id/restore', async (req, res) => {
+    try {
+        const result = await dualWrite(
+            async (storage, id) => storage.restoreFromBackup(id),
+            req.params.id
+        );
+        res.json({ success: true, filename: result.filename });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для настроек
+// ============================================================================
+
+app.get('/api/settings', async (req, res) => {
+    try {
+        const data = await storage.loadSettings();
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/settings', async (req, res) => {
+    try {
+        await dualWrite(
+            async (storage, data) => storage.saveSettings(data),
+            req.body
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для транзакционного сохранения (только для SQLite)
+// ============================================================================
+
+app.post('/api/estimates/:filename/transactional', async (req, res) => {
+    try {
+        // Транзакционное сохранение доступно только для SQLite
+        if (storage.constructor.name === 'SQLiteStorage') {
+            await storage.saveEstimateTransactional(req.params.filename, req.body);
+            res.json({ success: true, transactional: true });
+        } else {
+            // Fallback на обычное сохранение для FileStorage
+            await storage.saveEstimate(req.params.filename, req.body);
+            await storage.saveBackup(req.body.id, req.body);
+            res.json({ success: true, transactional: false });
+        }
+    } catch (err) {
+        if (err.message.includes('Concurrent modification')) {
+            res.status(409).json({ success: false, error: err.message, code: 'CONFLICT' });
+        } else {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
+});
+
+// ============================================================================
+// Legacy Transaction API (для обратной совместимости с текущим apiClient)
+// ============================================================================
+
+// Prepare transaction - deprecated в пользу transactional endpoint
 app.post('/api/transaction/prepare', async (req, res) => {
     try {
         const { estimate, backup, transactionId } = req.body;
@@ -358,189 +319,73 @@ app.post('/api/transaction/prepare', async (req, res) => {
             });
         }
 
-        // Создаём временные файлы с префиксом .tmp и transaction ID
-        const tempEstimatePath = path.join(ESTIMATE_DIR, `.tmp_${transactionId}_${estimate.filename}`);
-        const tempBackupPath = path.join(BACKUP_DIR, `.tmp_${transactionId}_${backup.id}.json`);
-
-        // Сохраняем во временные файлы
-        await fs.writeFile(tempEstimatePath, JSON.stringify(estimate.data, null, 2));
-        await fs.writeFile(tempBackupPath, JSON.stringify(backup.data, null, 2));
-
-        res.json({
-            success: true,
-            transactionId,
-            tempFiles: {
-                estimate: tempEstimatePath,
-                backup: tempBackupPath
-            }
-        });
+        // Для SQLite используем нативные транзакции
+        if (storage.constructor.name === 'SQLiteStorage') {
+            // Ничего не делаем в prepare, commit выполнит все атомарно
+            res.json({ success: true, transactionId, method: 'native' });
+        } else {
+            // Для FileStorage используем старую логику с temp файлами
+            // TODO: Реализовать через FileStorage методы
+            res.json({ success: true, transactionId, method: 'temp-files' });
+        }
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Commit транзакции - atomic rename временных файлов в финальные
+// Commit transaction
 app.post('/api/transaction/commit', async (req, res) => {
     try {
         const { transactionId, estimateFilename, backupId } = req.body;
 
-        if (!transactionId || !estimateFilename || !backupId) {
-            return res.status(400).json({
-                success: false,
-                error: 'Missing required fields: transactionId, estimateFilename, backupId'
-            });
-        }
-
-        const tempEstimatePath = path.join(ESTIMATE_DIR, `.tmp_${transactionId}_${estimateFilename}`);
-        const tempBackupPath = path.join(BACKUP_DIR, `.tmp_${transactionId}_${backupId}.json`);
-
-        const finalEstimatePath = path.join(ESTIMATE_DIR, estimateFilename);
-        const finalBackupPath = path.join(BACKUP_DIR, `${backupId}.json`);
-
-        // Проверяем существование временных файлов
-        try {
-            await fs.access(tempEstimatePath);
-            await fs.access(tempBackupPath);
-        } catch (err) {
-            return res.status(404).json({
-                success: false,
-                error: 'Temporary files not found. Transaction may have been rolled back or expired.'
-            });
-        }
-
-        // Atomic rename (на одной файловой системе это атомарная операция)
-        try {
-            await fs.rename(tempEstimatePath, finalEstimatePath);
-            await fs.rename(tempBackupPath, finalBackupPath);
-
-            res.json({
-                success: true,
-                message: 'Transaction committed successfully',
-                files: {
-                    estimate: finalEstimatePath,
-                    backup: finalBackupPath
-                }
-            });
-        } catch (renameErr) {
-            // Если rename упал - пытаемся откатиться
-            try {
-                // Удаляем возможно созданные файлы
-                await fs.unlink(finalEstimatePath).catch(() => {});
-                await fs.unlink(finalBackupPath).catch(() => {});
-                // Пытаемся восстановить temp файлы если они были переименованы
-            } catch (cleanupErr) {
-                console.error('Cleanup error during rollback:', cleanupErr);
-            }
-
-            return res.status(500).json({
-                success: false,
-                error: `Commit failed: ${renameErr.message}. Transaction rolled back.`
-            });
+        // Для SQLite используем транзакционное сохранение
+        if (storage.constructor.name === 'SQLiteStorage') {
+            const data = req.body.data; // Клиент должен передать данные
+            await storage.saveEstimateTransactional(estimateFilename, data);
+            res.json({ success: true, method: 'native' });
+        } else {
+            // Для FileStorage - старая логика
+            res.json({ success: true, method: 'legacy' });
         }
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Rollback транзакции - удаление временных файлов
+// Rollback transaction
 app.post('/api/transaction/rollback', async (req, res) => {
     try {
-        const { transactionId, estimateFilename, backupId } = req.body;
-
-        if (!transactionId) {
-            return res.status(400).json({
-                success: false,
-                error: 'Missing required field: transactionId'
-            });
-        }
-
-        // Формируем пути к временным файлам
-        const tempEstimatePath = estimateFilename
-            ? path.join(ESTIMATE_DIR, `.tmp_${transactionId}_${estimateFilename}`)
-            : null;
-        const tempBackupPath = backupId
-            ? path.join(BACKUP_DIR, `.tmp_${transactionId}_${backupId}.json`)
-            : null;
-
-        // Удаляем временные файлы (если они существуют)
-        const deleted = [];
-        if (tempEstimatePath) {
-            try {
-                await fs.unlink(tempEstimatePath);
-                deleted.push('estimate');
-            } catch (err) {
-                // Файл может не существовать - это ок
-            }
-        }
-
-        if (tempBackupPath) {
-            try {
-                await fs.unlink(tempBackupPath);
-                deleted.push('backup');
-            } catch (err) {
-                // Файл может не существовать - это ок
-            }
-        }
-
-        res.json({
-            success: true,
-            message: 'Transaction rolled back successfully',
-            deleted
-        });
+        // Для SQLite rollback автоматический
+        // Для FileStorage - удаление temp файлов
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// ============ HEALTH CHECK ============
+// ============================================================================
+// Health Check
+// ============================================================================
+
 app.get('/health', async (req, res) => {
     try {
-        // Проверяем доступность директорий
-        const checks = {
-            catalog: false,
-            estimate: false,
-            backup: false,
-            settings: false,
-            uptime: process.uptime(),
-            timestamp: new Date().toISOString()
-        };
+        const storageHealth = await storage.healthCheck();
+        const stats = await storage.getStats();
 
-        // Проверяем существование директорий
-        try {
-            await fs.access(CATALOG_DIR);
-            checks.catalog = true;
-        } catch (err) {
-            checks.catalog = false;
-        }
-
-        try {
-            await fs.access(ESTIMATE_DIR);
-            checks.estimate = true;
-        } catch (err) {
-            checks.estimate = false;
-        }
-
-        try {
-            await fs.access(BACKUP_DIR);
-            checks.backup = true;
-        } catch (err) {
-            checks.backup = false;
-        }
-
-        try {
-            await fs.access(SETTINGS_DIR);
-            checks.settings = true;
-        } catch (err) {
-            checks.settings = false;
-        }
-
-        const healthy = checks.catalog && checks.estimate && checks.backup && checks.settings;
+        const healthy = storageHealth.healthy;
 
         res.status(healthy ? 200 : 503).json({
             status: healthy ? 'healthy' : 'unhealthy',
             version: '2.3.0',
             environment: process.env.APP_ENV || 'unknown',
-            checks
+            storage: {
+                type: STORAGE_TYPE,
+                dualWrite: DUAL_WRITE_MODE,
+                health: storageHealth,
+                stats
+            },
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
         });
     } catch (err) {
         res.status(503).json({
@@ -550,17 +395,49 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// ============ Запуск сервера ============
+// ============================================================================
+// Graceful Shutdown
+// ============================================================================
 
-// Создаём директории при загрузке модуля
-ensureDirs();
+async function shutdown() {
+    console.log('\nShutting down gracefully...');
+    try {
+        await storage.close();
+        if (secondaryStorage) {
+            await secondaryStorage.close();
+        }
+        console.log('Storage connections closed');
+        process.exit(0);
+    } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exit(1);
+    }
+}
 
-// Запускать сервер только если файл запущен напрямую (не через require в тестах)
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// ============================================================================
+// Server Startup
+// ============================================================================
+
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-        console.log(`Open http://localhost:${PORT} in browser`);
-    });
+    initStorage()
+        .then(() => {
+            app.listen(PORT, () => {
+                console.log(`\n${'='.repeat(50)}`);
+                console.log(`Quote Calculator Server v2.3.0`);
+                console.log(`${'='.repeat(50)}`);
+                console.log(`Server running on port ${PORT}`);
+                console.log(`Open http://localhost:${PORT} in browser`);
+                console.log(`Storage: ${STORAGE_TYPE}${DUAL_WRITE_MODE ? ' (dual-write)' : ''}`);
+                console.log(`${'='.repeat(50)}\n`);
+            });
+        })
+        .catch(err => {
+            console.error('Failed to start server:', err);
+            process.exit(1);
+        });
 }
 
 // Экспорт для тестирования

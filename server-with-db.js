@@ -1,0 +1,863 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+
+// Storage adapters
+const SQLiteStorage = require('./storage/SQLiteStorage');
+const FileStorage = require('./storage/FileStorage'); // Only for import/export
+
+// DAY 1.3: Disk space validation middleware (Production Safety)
+const { checkDiskSpace, getDiskSpaceInfo } = require('./middleware/diskSpace');
+
+// DAY 2.1: Structured logging with Winston (Production Observability)
+const logger = require('./utils/logger');
+
+const app = express();
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const isTestMode = process.env.NODE_ENV === 'test';
+const PORT = isTestMode ? 3001 : (process.env.PORT || 4000);
+
+// DAY 5: SQLite-only mode (migration completed)
+// FileStorage is only used for import/export operations
+const STORAGE_TYPE = 'sqlite';
+
+logger.info('Storage configuration', {
+    version: '2.3.0',
+    environment: process.env.NODE_ENV || 'development',
+    type: STORAGE_TYPE,
+    dualWrite: false,
+    testMode: isTestMode
+});
+
+// ============================================================================
+// Middleware
+// ============================================================================
+
+app.use(cors());
+app.use(express.json({ limit: process.env.JSON_LIMIT || '50mb' }));
+app.use(express.static('.'));
+
+// DAY 2.1: HTTP request logging
+if (!isTestMode) {
+    app.use(logger.middleware());
+}
+
+// ============================================================================
+// Storage Initialization
+// ============================================================================
+
+// DAY 5: SQLite-only storage
+const storage = new SQLiteStorage();
+
+// Инициализация storage при старте
+async function initStorage() {
+    try {
+        await storage.init();
+        logger.info('Primary storage initialized', {
+            version: '2.3.0',
+            environment: process.env.NODE_ENV || 'development'
+        });
+    } catch (err) {
+        logger.logError(err, { context: 'Storage initialization' });
+        throw err;
+    }
+}
+
+// ============================================================================
+// API для каталога
+// ============================================================================
+
+app.get('/api/catalog/list', async (req, res) => {
+    try {
+        const files = await storage.getCatalogsList();
+        res.json({ success: true, files });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/catalog/:filename', async (req, res) => {
+    try {
+        const data = await storage.loadCatalog(req.params.filename);
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/catalog/:filename', checkDiskSpace, async (req, res) => {
+    try {
+        await storage.saveCatalog(req.params.filename, req.body);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для смет
+// ============================================================================
+
+app.get('/api/estimates', async (req, res) => {
+    try {
+        const estimates = await storage.getEstimatesList();
+        res.json({ success: true, estimates });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// Batch API для массового сохранения (для SyncManager)
+// ============================================================================
+
+/**
+ * Batch save estimates - транзакционное сохранение нескольких смет
+ * POST /api/estimates/batch
+ * Body: { items: [{id, data}, ...] }
+ * Returns: { succeeded: [ids], failed: [{id, error}] }
+ */
+app.post('/api/estimates/batch', checkDiskSpace, async (req, res) => {
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid request: items must be a non-empty array'
+        });
+    }
+
+    const results = {
+        succeeded: [],
+        failed: []
+    };
+
+    // SQLiteStorage: используем транзакцию для batch save
+    if (STORAGE_TYPE === 'sqlite') {
+        try {
+            // Транзакция для всего batch
+            const transaction = storage.db.transaction(() => {
+                for (const item of items) {
+                    const { id, data } = item;
+
+                    if (!id || !data) {
+                        results.failed.push({ id, error: 'Missing id or data' });
+                        continue;
+                    }
+
+                    try {
+                        // Используем синхронный метод внутри транзакции
+                        const now = Math.floor(Date.now() / 1000);
+                        const dataStr = JSON.stringify(data);
+                        const dataHash = storage._calculateHash(dataStr);
+                        const metadata = storage._extractMetadata(data);
+                        const filename = data.filename || metadata.filename || `estimate_${id}.json`;
+
+                        const orgId = storage.defaultOrganizationId;
+                        const ownerId = storage.defaultUserId;
+
+                        // Проверяем существование
+                        const existing = storage.statements.getEstimateById.get(id, orgId);
+
+                        if (existing) {
+                            // UPDATE
+                            storage.statements.updateEstimate.run(
+                                filename,
+                                dataStr,
+                                metadata.clientName,
+                                metadata.clientEmail,
+                                metadata.clientPhone,
+                                metadata.paxCount,
+                                metadata.tourStart,
+                                metadata.tourEnd,
+                                metadata.totalCost,
+                                metadata.totalProfit,
+                                metadata.servicesCount,
+                                dataHash,
+                                now,
+                                id,
+                                existing.data_version,
+                                orgId
+                            );
+                        } else {
+                            // INSERT
+                            storage.statements.insertEstimate.run(
+                                id,
+                                filename,
+                                data.version || '1.1.0',
+                                storage.appVersion,
+                                dataStr,
+                                metadata.clientName,
+                                metadata.clientEmail,
+                                metadata.clientPhone,
+                                metadata.paxCount,
+                                metadata.tourStart,
+                                metadata.tourEnd,
+                                metadata.totalCost,
+                                metadata.totalProfit,
+                                metadata.servicesCount,
+                                1,
+                                dataHash,
+                                now,
+                                now,
+                                ownerId,
+                                orgId
+                            );
+                        }
+
+                        results.succeeded.push(id);
+                    } catch (err) {
+                        results.failed.push({ id, error: err.message });
+                    }
+                }
+            });
+
+            // Выполняем транзакцию
+            transaction();
+
+            res.json({
+                success: true,
+                ...results
+            });
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                error: `Batch transaction failed: ${err.message}`,
+                ...results
+            });
+        }
+    } else {
+        // FileStorage: последовательное сохранение (нет транзакций)
+        for (const item of items) {
+            const { id, data } = item;
+
+            if (!id || !data) {
+                results.failed.push({ id, error: 'Missing id or data' });
+                continue;
+            }
+
+            try {
+                await storage.saveEstimate(id, data);
+                results.succeeded.push(id);
+            } catch (err) {
+                results.failed.push({ id, error: err.message });
+            }
+        }
+
+        res.json({
+            success: true,
+            ...results
+        });
+    }
+});
+
+// ============================================================================
+// Single Estimate API (параметризованные routes)
+// ============================================================================
+
+// ID-First: Load estimate by ID
+app.get('/api/estimates/:id', async (req, res) => {
+    try {
+        const data = await storage.loadEstimate(req.params.id);
+        res.json({ success: true, data });
+    } catch (err) {
+        logger.logError(err, { context: `Load estimate ${req.params.id}` });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ID-First: Save estimate by ID
+app.post('/api/estimates/:id', checkDiskSpace, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = req.body;
+
+        // Save estimate with ID-First architecture
+        await storage.saveEstimate(id, data);
+
+        res.json({ success: true });
+    } catch (err) {
+        logger.logError(err, { context: `Save estimate ${req.params.id}` });
+
+        // Проверка на optimistic locking conflict
+        if (err.message.includes('Concurrent modification')) {
+            res.status(409).json({ success: false, error: err.message, code: 'CONFLICT' });
+        } else {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
+});
+
+// ID-First: Delete estimate by ID
+app.delete('/api/estimates/:id', checkDiskSpace, async (req, res) => {
+    try {
+        await storage.deleteEstimate(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        logger.logError(err, { context: `Delete estimate ${req.params.id}` });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ID-First rename endpoint
+app.put('/api/estimates/:id/rename', checkDiskSpace, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { newFilename } = req.body;
+
+        if (!newFilename) {
+            return res.status(400).json({ success: false, error: 'newFilename is required' });
+        }
+
+        // Load current estimate
+        const estimate = await storage.loadEstimate(id);
+
+        if (!estimate) {
+            return res.status(404).json({ success: false, error: `Estimate not found: ${id}` });
+        }
+
+        // Update filename in metadata and save back
+        estimate.filename = newFilename;
+        await storage.saveEstimate(id, estimate);
+
+        res.json({ success: true, newFilename });
+    } catch (err) {
+        logger.logError(err, { context: `Rename estimate ${req.params.id}` });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для backup'ов
+// ============================================================================
+
+app.get('/api/backups', async (req, res) => {
+    try {
+        const backups = await storage.getBackupsList();
+        res.json({ success: true, backups });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/backups/:id', async (req, res) => {
+    try {
+        const data = await storage.loadBackup(req.params.id);
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/backups/:id', checkDiskSpace, async (req, res) => {
+    try {
+        await storage.saveBackup(req.params.id, req.body);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/backups/:id/restore', checkDiskSpace, async (req, res) => {
+    try {
+        const result = await storage.restoreFromBackup(req.params.id);
+        res.json({ success: true, filename: result.filename });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для настроек
+// ============================================================================
+
+app.get('/api/settings', async (req, res) => {
+    try {
+        const data = await storage.loadSettings();
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/settings', checkDiskSpace, async (req, res) => {
+    try {
+        await storage.saveSettings(req.body);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// API для транзакционного сохранения (только для SQLite)
+// ============================================================================
+
+app.post('/api/estimates/:filename/transactional', checkDiskSpace, async (req, res) => {
+    try {
+        // Транзакционное сохранение доступно только для SQLite
+        if (storage.constructor.name === 'SQLiteStorage') {
+            await storage.saveEstimateTransactional(req.params.filename, req.body);
+            res.json({ success: true, transactional: true });
+        } else {
+            // Fallback на обычное сохранение для FileStorage
+            await storage.saveEstimate(req.params.filename, req.body);
+            await storage.saveBackup(req.body.id, req.body);
+            res.json({ success: true, transactional: false });
+        }
+    } catch (err) {
+        if (err.message.includes('Concurrent modification')) {
+            res.status(409).json({ success: false, error: err.message, code: 'CONFLICT' });
+        } else {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
+});
+
+// ============================================================================
+// Legacy Transaction API (для обратной совместимости с текущим apiClient)
+// ============================================================================
+
+// Prepare transaction - deprecated в пользу transactional endpoint
+app.post('/api/transaction/prepare', checkDiskSpace, async (req, res) => {
+    try {
+        const { estimate, backup, transactionId } = req.body;
+
+        if (!estimate || !backup || !transactionId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: estimate, backup, transactionId'
+            });
+        }
+
+        // Для SQLite используем нативные транзакции
+        if (storage.constructor.name === 'SQLiteStorage') {
+            // Ничего не делаем в prepare, commit выполнит все атомарно
+            res.json({ success: true, transactionId, method: 'native' });
+        } else {
+            // Для FileStorage используем старую логику с temp файлами
+            // TODO: Реализовать через FileStorage методы
+            res.json({ success: true, transactionId, method: 'temp-files' });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Commit transaction
+app.post('/api/transaction/commit', checkDiskSpace, async (req, res) => {
+    try {
+        const { transactionId, estimateFilename, backupId, data } = req.body;
+
+        // Валидация входных данных
+        if (!estimateFilename) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required field: estimateFilename'
+            });
+        }
+
+        if (!data) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required field: data'
+            });
+        }
+
+        // Для SQLite используем транзакционное сохранение
+        if (storage.constructor.name === 'SQLiteStorage') {
+            await storage.saveEstimateTransactional(estimateFilename, data);
+            res.json({ success: true, method: 'native', transactionId });
+        } else {
+            // Для FileStorage - обычное сохранение estimate + backup
+            await storage.saveEstimate(estimateFilename, data);
+            if (data.id) {
+                await storage.saveBackup(data.id, data);
+            }
+            res.json({ success: true, method: 'legacy', transactionId });
+        }
+    } catch (err) {
+        logger.logError(err, { context: 'Transaction commit', transactionId: req.body.transactionId });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Rollback transaction
+app.post('/api/transaction/rollback', async (req, res) => {
+    try {
+        // Для SQLite rollback автоматический
+        // Для FileStorage - удаление temp файлов
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// DAY 2.3: Export/Import API (Production Data Portability)
+// ============================================================================
+
+/**
+ * Export all data - estimates, catalogs, settings, backups as JSON
+ * GET /api/export/all
+ * Query params:
+ *   - includeBackups: boolean (default: true)
+ * Returns: JSON with all data
+ */
+app.get('/api/export/all', async (req, res) => {
+    try {
+        const includeBackups = req.query.includeBackups !== 'false';
+
+        logger.info('Exporting all data', { includeBackups });
+
+        const exportData = {
+            version: '2.3.0',
+            exportDate: new Date().toISOString(),
+            storageType: STORAGE_TYPE,
+            data: {}
+        };
+
+        // Export estimates
+        const estimates = await storage.getEstimatesList();
+        exportData.data.estimates = [];
+        for (const est of estimates) {
+            try {
+                // Use id instead of filename for SQLiteStorage
+                const data = await storage.loadEstimate(est.id);
+                exportData.data.estimates.push({
+                    id: est.id,
+                    filename: est.filename,
+                    data: data
+                });
+            } catch (err) {
+                logger.warn('Failed to load estimate for export', {
+                    id: est.id,
+                    filename: est.filename,
+                    error: err.message
+                });
+            }
+        }
+
+        // Export catalogs
+        const catalogs = await storage.getCatalogsList();
+        exportData.data.catalogs = [];
+        for (const catalogName of catalogs) {
+            try {
+                // catalogName is a string (filename), not an object
+                const data = await storage.loadCatalog(catalogName);
+                exportData.data.catalogs.push({
+                    filename: catalogName,
+                    data: data
+                });
+            } catch (err) {
+                logger.warn('Failed to load catalog for export', {
+                    filename: catalogName,
+                    error: err.message
+                });
+            }
+        }
+
+        // Export settings
+        try {
+            const settings = await storage.loadSettings();
+            exportData.data.settings = settings;
+        } catch (err) {
+            logger.warn('Failed to load settings for export', { error: err.message });
+            exportData.data.settings = {};
+        }
+
+        // Export backups (optional)
+        if (includeBackups) {
+            const backups = await storage.getBackupsList();
+            exportData.data.backups = [];
+            for (const backup of backups) {
+                try {
+                    const data = await storage.loadBackup(backup.id || backup.estimate_id);
+                    exportData.data.backups.push({
+                        id: backup.id || backup.estimate_id,
+                        data: data
+                    });
+                } catch (err) {
+                    logger.warn('Failed to load backup for export', {
+                        id: backup.id,
+                        error: err.message
+                    });
+                }
+            }
+        }
+
+        logger.info('Export completed', {
+            estimates: exportData.data.estimates.length,
+            catalogs: exportData.data.catalogs.length,
+            backups: includeBackups ? exportData.data.backups.length : 0
+        });
+
+        // Set headers for file download
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="quote-calculator-export-${Date.now()}.json"`);
+        res.json(exportData);
+    } catch (err) {
+        logger.logError(err, { context: 'Export all data' });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * Import all data from JSON export
+ * POST /api/import/all
+ * Body: JSON export file
+ * Returns: { success: true, imported: {...counts}, failed: {...counts} }
+ */
+app.post('/api/import/all', checkDiskSpace, async (req, res) => {
+    try {
+        const importData = req.body;
+
+        // Validate import data structure
+        if (!importData || !importData.version || !importData.data) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid import data: missing version or data fields'
+            });
+        }
+
+        logger.info('Starting data import', {
+            version: importData.version,
+            exportDate: importData.exportDate
+        });
+
+        const results = {
+            imported: {
+                estimates: 0,
+                catalogs: 0,
+                settings: false,
+                backups: 0
+            },
+            failed: {
+                estimates: [],
+                catalogs: [],
+                backups: []
+            }
+        };
+
+        // Import estimates
+        if (importData.data.estimates && Array.isArray(importData.data.estimates)) {
+            for (const item of importData.data.estimates) {
+                try {
+                    // Use id or data.id for SQLiteStorage
+                    const estimateId = item.id || item.data.id;
+                    if (!estimateId) {
+                        throw new Error('Missing estimate id');
+                    }
+                    await storage.saveEstimate(estimateId, item.data);
+                    results.imported.estimates++;
+                } catch (err) {
+                    logger.warn('Failed to import estimate', {
+                        id: item.id,
+                        filename: item.filename,
+                        error: err.message
+                    });
+                    results.failed.estimates.push({
+                        id: item.id,
+                        filename: item.filename,
+                        error: err.message
+                    });
+                }
+            }
+        }
+
+        // Import catalogs
+        if (importData.data.catalogs && Array.isArray(importData.data.catalogs)) {
+            for (const item of importData.data.catalogs) {
+                try {
+                    await storage.saveCatalog(item.filename, item.data);
+                    results.imported.catalogs++;
+                } catch (err) {
+                    logger.warn('Failed to import catalog', {
+                        filename: item.filename,
+                        error: err.message
+                    });
+                    results.failed.catalogs.push({
+                        filename: item.filename,
+                        error: err.message
+                    });
+                }
+            }
+        }
+
+        // Import settings
+        if (importData.data.settings) {
+            try {
+                await storage.saveSettings(importData.data.settings);
+                results.imported.settings = true;
+            } catch (err) {
+                logger.warn('Failed to import settings', { error: err.message });
+            }
+        }
+
+        // Import backups
+        if (importData.data.backups && Array.isArray(importData.data.backups)) {
+            for (const item of importData.data.backups) {
+                try {
+                    await storage.saveBackup(item.id, item.data);
+                    results.imported.backups++;
+                } catch (err) {
+                    logger.warn('Failed to import backup', {
+                        id: item.id,
+                        error: err.message
+                    });
+                    results.failed.backups.push({
+                        id: item.id,
+                        error: err.message
+                    });
+                }
+            }
+        }
+
+        logger.info('Import completed', { results });
+
+        res.json({
+            success: true,
+            ...results
+        });
+    } catch (err) {
+        logger.logError(err, { context: 'Import all data' });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * Export SQLite database file (only for SQLiteStorage)
+ * GET /api/export/database
+ * Returns: SQLite database file as binary stream
+ */
+app.get('/api/export/database', async (req, res) => {
+    try {
+        // This endpoint only works with SQLiteStorage
+        if (storage.constructor.name !== 'SQLiteStorage') {
+            return res.status(400).json({
+                success: false,
+                error: 'Database export is only available for SQLite storage'
+            });
+        }
+
+        logger.info('Exporting SQLite database');
+
+        // Use better-sqlite3 serialize() method to get database as Buffer
+        const dbBuffer = storage.db.serialize();
+
+        // Set headers for binary download
+        const filename = `quote-calculator-db-${Date.now()}.db`;
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', dbBuffer.length);
+
+        logger.info('Database export completed', {
+            filename,
+            sizeBytes: dbBuffer.length
+        });
+
+        // Send the buffer
+        res.send(dbBuffer);
+    } catch (err) {
+        logger.logError(err, { context: 'Export database' });
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ============================================================================
+// Health Check
+// ============================================================================
+
+app.get('/health', async (req, res) => {
+    try {
+        const storageHealth = await storage.healthCheck();
+        const stats = await storage.getStats();
+
+        // DAY 1.3: Include disk space info in health check (Production Safety)
+        const diskSpace = getDiskSpaceInfo();
+
+        const healthy = storageHealth.healthy && diskSpace.healthy;
+
+        res.status(healthy ? 200 : 503).json({
+            status: healthy ? 'healthy' : 'unhealthy',
+            version: '2.3.0',
+            environment: process.env.APP_ENV || 'development',
+            storage: {
+                type: STORAGE_TYPE,
+                health: storageHealth,
+                stats
+            },
+            diskSpace,
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: err.message
+        });
+    }
+});
+
+// ============================================================================
+// Graceful Shutdown
+// ============================================================================
+
+async function shutdown() {
+    logger.info('Shutting down gracefully...');
+    try {
+        await storage.close();
+        logger.info('Storage connections closed');
+        process.exit(0);
+    } catch (err) {
+        logger.logError(err, { context: 'Graceful shutdown' });
+        process.exit(1);
+    }
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// ============================================================================
+// Server Startup
+// ============================================================================
+
+if (require.main === module) {
+    initStorage()
+        .then(() => {
+            app.listen(PORT, () => {
+                logger.info('Server started', {
+                    version: '2.3.0',
+                    environment: process.env.NODE_ENV || 'development',
+                    port: PORT,
+                    url: `http://localhost:${PORT}`,
+                    storage: STORAGE_TYPE,
+                    dualWrite: false
+                });
+
+                // Pretty banner for console in development
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log(`\n${'='.repeat(50)}`);
+                    console.log(`Quote Calculator Server v2.3.0`);
+                    console.log(`${'='.repeat(50)}`);
+                    console.log(`Server running on port ${PORT}`);
+                    console.log(`Open http://localhost:${PORT} in browser`);
+                    console.log(`Storage: ${STORAGE_TYPE}`);
+                    console.log(`${'='.repeat(50)}\n`);
+                }
+            });
+        })
+        .catch(err => {
+            logger.logError(err, { context: 'Server startup' });
+            process.exit(1);
+        });
+}
+
+// Экспорт для тестирования
+module.exports = app;

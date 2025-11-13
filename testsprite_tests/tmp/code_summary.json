@@ -1,0 +1,186 @@
+{
+  "tech_stack": [
+    "Node.js",
+    "Express.js 4.x",
+    "SQLite3 (better-sqlite3)",
+    "body-parser",
+    "cors",
+    "multer (file uploads)",
+    "winston (logging)"
+  ],
+  "features": [
+    {
+      "name": "Catalog Management API",
+      "description": "CRUD operations for service catalogs (templates) stored in SQLite database",
+      "files": [
+        "server-with-db.js",
+        "storage/SQLiteStorage.js"
+      ],
+      "api_doc": {
+        "paths": {
+          "/api/catalog": {
+            "get": {
+              "summary": "List all catalogs",
+              "responses": {
+                "200": {
+                  "description": "Array of catalog objects"
+                }
+              }
+            }
+          },
+          "/api/catalog/{filename}": {
+            "get": {
+              "summary": "Get specific catalog by filename",
+              "parameters": [{"name": "filename", "in": "path", "required": true, "schema": {"type": "string"}}],
+              "responses": {"200": {"description": "Catalog data"}, "404": {"description": "Not found"}}
+            },
+            "post": {
+              "summary": "Save/update catalog",
+              "parameters": [{"name": "filename", "in": "path", "required": true}],
+              "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object"}}}},
+              "responses": {"200": {"description": "Success"}, "500": {"description": "Error"}}
+            },
+            "delete": {
+              "summary": "Delete catalog",
+              "parameters": [{"name": "filename", "in": "path", "required": true}],
+              "responses": {"200": {"description": "Success"}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Estimate Management API",
+      "description": "CRUD operations for estimates with atomic transactions (estimate + backup saved together)",
+      "files": ["server-with-db.js", "storage/SQLiteStorage.js"],
+      "api_doc": {
+        "paths": {
+          "/api/estimates": {
+            "get": {
+              "summary": "List all estimates with metadata",
+              "responses": {"200": {"description": "Success with estimates array"}}
+            }
+          },
+          "/api/estimates/{filename}": {
+            "get": {
+              "summary": "Get specific estimate by filename",
+              "parameters": [{"name": "filename", "in": "path", "required": true}],
+              "responses": {"200": {"description": "Estimate data"}, "404": {"description": "Not found"}}
+            },
+            "post": {
+              "summary": "Save/update estimate with atomic transaction",
+              "parameters": [{"name": "filename", "in": "path", "required": true}],
+              "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object"}}}},
+              "responses": {"200": {"description": "Success"}, "409": {"description": "Conflict"}, "500": {"description": "Error"}}
+            },
+            "delete": {
+              "summary": "Delete estimate",
+              "parameters": [{"name": "filename", "in": "path", "required": true}],
+              "responses": {"200": {"description": "Success"}}
+            }
+          },
+          "/api/estimates/{oldFilename}/rename": {
+            "put": {
+              "summary": "Rename estimate file",
+              "parameters": [{"name": "oldFilename", "in": "path", "required": true}],
+              "requestBody": {"required": true, "content": {"application/json": {"schema": {"properties": {"newFilename": {"type": "string"}}}}}},
+              "responses": {"200": {"description": "Success with new filename"}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Backup Management API",
+      "description": "Save and restore backups for estimates",
+      "files": ["server-with-db.js", "storage/SQLiteStorage.js"],
+      "api_doc": {
+        "paths": {
+          "/api/backups/{id}": {
+            "get": {
+              "summary": "List all backups for specific estimate ID",
+              "parameters": [{"name": "id", "in": "path", "required": true}],
+              "responses": {"200": {"description": "Array of backups"}}
+            },
+            "post": {
+              "summary": "Create manual backup",
+              "parameters": [{"name": "id", "in": "path", "required": true}],
+              "requestBody": {"required": true},
+              "responses": {"200": {"description": "Success"}}
+            }
+          },
+          "/api/backups/{id}/restore": {
+            "post": {
+              "summary": "Restore estimate from backup",
+              "parameters": [{"name": "id", "in": "path", "required": true}],
+              "responses": {"200": {"description": "Restored data"}, "404": {"description": "Not found"}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Export/Import API",
+      "description": "Export all data to JSON or SQLite file, import from JSON",
+      "files": ["server-with-db.js", "storage/SQLiteStorage.js"],
+      "api_doc": {
+        "paths": {
+          "/api/export/all": {
+            "get": {
+              "summary": "Export all data to JSON",
+              "responses": {"200": {"description": "Complete database export"}}
+            }
+          },
+          "/api/export/database": {
+            "get": {
+              "summary": "Export raw SQLite database file",
+              "responses": {"200": {"description": "Binary SQLite file"}}
+            }
+          },
+          "/api/import/all": {
+            "post": {
+              "summary": "Import data from JSON (replaces all data)",
+              "requestBody": {"required": true},
+              "responses": {"200": {"description": "Import statistics"}, "400": {"description": "Invalid data"}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Settings Management API",
+      "description": "Application settings persistence",
+      "files": ["server-with-db.js", "storage/SQLiteStorage.js"],
+      "api_doc": {
+        "paths": {
+          "/api/settings": {
+            "get": {
+              "summary": "Get application settings",
+              "responses": {"200": {"description": "Settings object"}}
+            },
+            "post": {
+              "summary": "Save application settings",
+              "requestBody": {"required": true},
+              "responses": {"200": {"description": "Success"}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Statistics API",
+      "description": "Database statistics and health monitoring",
+      "files": ["server-with-db.js", "storage/SQLiteStorage.js"],
+      "api_doc": {
+        "paths": {
+          "/api/stats": {
+            "get": {
+              "summary": "Get database statistics",
+              "responses": {"200": {"description": "Database statistics including counts and size"}}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

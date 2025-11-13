@@ -9,6 +9,14 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:sqlite": "jest SQLiteStorage",
+    "test:file": "jest FileStorage",
+    "test:integration": "jest storage-migration",
+    "test:unit": "jest --testPathPattern=storage/",
+    "test:verbose": "jest --verbose",
+    "migrate:dry-run": "node scripts/migrate-to-db.js --dry-run --verbose",
+    "migrate:run": "node scripts/migrate-to-db.js --validate",
+    "migrate:validate": "node scripts/migrate-to-db.js --validate --dry-run",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
@@ -20,6 +28,21 @@
     "docker:prod": "docker-compose up -d quote-production",
     "docker:staging": "docker-compose up -d quote-staging",
     "docker:backup-service": "docker-compose --profile backup up -d backup-service",
+    "vps:build": "docker-compose -f docker-compose.vps.yml build",
+    "vps:up": "docker-compose -f docker-compose.vps.yml up -d",
+    "vps:down": "docker-compose -f docker-compose.vps.yml down",
+    "vps:logs": "docker-compose -f docker-compose.vps.yml logs -f",
+    "vps:logs:production": "docker-compose -f docker-compose.vps.yml logs -f quote-production",
+    "vps:logs:staging": "docker-compose -f docker-compose.vps.yml logs -f quote-staging",
+    "vps:restart:production": "docker-compose -f docker-compose.vps.yml restart quote-production",
+    "vps:restart:staging": "docker-compose -f docker-compose.vps.yml restart quote-staging",
+    "db:export:local-dev": "./scripts/export-db.sh local-dev",
+    "db:export:local-staging": "./scripts/export-db.sh local-staging",
+    "db:export:vps-staging": "./scripts/export-db.sh vps-staging",
+    "db:export:vps-production": "./scripts/export-db.sh vps-production",
+    "db:import": "./scripts/import-db.sh",
+    "db:check": "./scripts/check-db-compatibility.sh",
+    "db:backup:vps": "./scripts/backup-vps-production.sh",
     "promote:production": "./scripts/promote-to-production.sh",
     "release:create": "echo 'Usage: git tag v2.X.X && git push --tags' && read -p 'Enter version (v2.X.X): ' version && git tag $version && git push --tags",
     "release:list": "git tag -l 'v*' --sort=-v:refname | head -10"
@@ -32,14 +55,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "winston": "^3.18.3"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
     "jest": "^30.2.0",
+    "playwright": "^1.56.1",
     "supertest": "^7.1.4"
   }
 }

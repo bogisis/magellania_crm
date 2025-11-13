@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-10-27T13:13:13.260Z",
+  "options": {
+    "dryRun": false,
+    "verbose": false,
+    "validate": true
+  },
+  "stats": {
+    "estimates": {
+      "total": 6,
+      "success": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "backups": {
+      "total": 13,
+      "success": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "catalogs": {
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "errors": []
+  },
+  "summary": {
+    "totalItems": 22,
+    "totalSuccess": 22,
+    "totalFailed": 0,
+    "totalSkipped": 0
+  }
+}

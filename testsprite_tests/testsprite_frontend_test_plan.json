@@ -1,0 +1,594 @@
+[
+  {
+    "id": "TC001",
+    "title": "Export All Data JSON Success",
+    "description": "Verify that the GET /api/export/all endpoint successfully exports all application data as a valid JSON file including estimates, catalogs, settings, and optional backups.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send GET request to /api/export/all without backups parameter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response status is 200 OK"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response Content-Type is application/json"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify JSON payload contains metadata, estimates, catalogs, settings, and excludes backups"
+      },
+      {
+        "type": "action",
+        "description": "Send GET request to /api/export/all with backups=1 parameter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response includes backups data as well"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify JSON data is well-formed and parseable"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Export Database SQLite Binary Success",
+    "description": "Verify that the GET /api/export/database endpoint successfully exports the complete raw SQLite database file as a binary download.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send GET request to /api/export/database"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response status is 200 OK"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response Content-Type is application/octet-stream or appropriate SQLite binary mime type"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify content is a valid SQLite database file by opening and checking tables"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Import Data JSON Success with Complete Valid Data",
+    "description": "Verify POST /api/import/all correctly imports a well-formed JSON export containing all data with no errors, merging into existing database atomically.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Prepare a valid JSON export file representing full application data"
+      },
+      {
+        "type": "action",
+        "description": "Send POST request to /api/import/all with JSON file as body"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response status is 200 OK"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response body indicates success with counts of imported items"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify database state is updated accordingly with merged data"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Import Data JSON Partial Failure Handling",
+    "description": "Verify POST /api/import/all correctly handles partially invalid JSON data by importing valid parts, reporting errors for invalid items, and not applying partial corrupt data.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Prepare JSON export with some invalid estimate IDs and corrupted entries"
+      },
+      {
+        "type": "action",
+        "description": "Send POST request to /api/import/all with malformed JSON data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response status is 207 Multi-status or 200 with import result details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response body contains success and failure counts with error messages"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify database state includes only valid imported data, invalid data is rejected"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Transactional Save Atomic Commit Success",
+    "description": "Verify that the three-phase commit transactional save API endpoints (prepare, commit, rollback) atomic update estimate and backup data on save.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send prepare request with new estimate data to /api/save/prepare"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify prepare responds with readiness confirmation"
+      },
+      {
+        "type": "action",
+        "description": "Send commit request to /api/save/commit"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify commit responds success"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify estimate and backup files are updated atomically"
+      },
+      {
+        "type": "action",
+        "description": "Check consistency by reading data after commit"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Transactional Save Rollback on Failure",
+    "description": "Verify that during transactional save, if any step fails or an explicit rollback is requested, the operation cancels without persisting partial data.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send prepare request with invalid or conflicting estimate data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify prepare detects failure and returns error"
+      },
+      {
+        "type": "action",
+        "description": "Send rollback request to /api/save/rollback"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify rollback responds with confirmation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no changes are applied to estimate or backup data"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Frontend Export Button and Progress Feedback",
+    "description": "Verify the frontend export button triggers export APIs correctly and provides meaningful UI feedback including progress indication and success or failure notifications.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Click frontend export all data button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify HTTP request to /api/export/all is triggered"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify UI shows progress indicator during export"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify success notification and file download prompt on completion"
+      },
+      {
+        "type": "action",
+        "description": "Click frontend export SQLite database button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify UI shows progress and triggers /api/export/database"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Frontend Import Functionality with Error Messages",
+    "description": "Verify that user-import selected JSON files upload correctly through UI, validation feedback is presented with detailed error reporting on failure, and success leads to clear confirmation messages.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Use frontend import button to select a valid JSON export file"
+      },
+      {
+        "type": "action",
+        "description": "Verify file content is sent via POST /api/import/all"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify success notification on valid import"
+      },
+      {
+        "type": "action",
+        "description": "Select an invalid JSON file or corrupted export"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify detailed error messages displayed describing failures"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Disk Space Middleware Blocking Writes on Low Disk",
+    "description": "Verify middleware prevents write operations (save, import) when disk space is insufficient, returning a proper HTTP status code and error message without corrupting data.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Simulate low disk space condition on server"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save an estimate via transactional save API"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response status code indicates failure (e.g., 507 Insufficient Storage)"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error response includes disk space warning"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to import JSON data under low disk condition"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify import is blocked with correct error message"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Global Error Boundary Recovery",
+    "description": "Verify that runtime errors in loading, saving, calculating, or importing are caught by the global error boundary, logged, and that the UI recovers without freezing or crashing.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Force a runtime error during estimate calculation in frontend"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error boundary catches the error"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user-visible notification about the issue appears"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify app remains responsive and user can continue after recovery"
+      },
+      {
+        "type": "action",
+        "description": "Force error during import API call"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error is caught and logged with details"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Backend Logging of Export and Import Events",
+    "description": "Verify that all export and import API calls are logged with accurate verbosity including timestamps, user context, and error states in Winston logs.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform data export via API"
+      },
+      {
+        "type": "action",
+        "description": "Perform data import via API"
+      },
+      {
+        "type": "assertion",
+        "description": "Check Winston logs for entries related to export and import with correct metadata"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify logs contain error messages if errors occurred"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Docker Deployment with Nginx Reverse Proxy Configuration",
+    "description": "Verify that the application containerizes and runs successfully with docker-compose using nginx reverse proxy, SSL/TLS, rate limiting, and security headers applied correctly.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Build and start application using docker-compose.prod.yml"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify containers start without errors"
+      },
+      {
+        "type": "action",
+        "description": "Access application via nginx with HTTPS"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify SSL certificate is valid and connection is secure"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify security headers are present in HTTP responses"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify rate limiting is enforced by triggering multiple requests"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify gzip compression is enabled"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Data Migration File Storage to SQLite Integrity",
+    "description": "Verify that migrating data from file-based storage to SQLite preserves data integrity and provides rollback capability if migration fails.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Prepare existing data in file-based storage"
+      },
+      {
+        "type": "action",
+        "description": "Run migration script scripts/migrate-to-db.js"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify data appears correctly in SQLite database after migration"
+      },
+      {
+        "type": "action",
+        "description": "Simulate failure during migration process"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify rollback functionality restores previous state intact"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "API Client Handles Export and Import Errors Gracefully",
+    "description": "Verify that the frontend API client correctly handles HTTP errors, network failures, and invalid responses during export and import operations with retries and user notifications.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Simulate network failure during export API call"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify API client retries request as configured"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user sees appropriate error notification if retries fail"
+      },
+      {
+        "type": "action",
+        "description": "Simulate server returning invalid JSON on import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify API client handles parse error and reports to user"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Estimate Save Autosave with Debounce",
+    "description": "Verify that estimate saves triggered by frontend autosave implement debounce logic to avoid excessive API calls and correctly reflect save status.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Edit estimate rapidly in UI triggering multiple autosave calls"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that save API calls are debounced and limited in frequency"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify save status indicator updates correctly on successful saves"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Pricing Calculation Engine Validation and Order Enforcement",
+    "description": "Verify that complex pricing calculations adhere strictly to business logic, respect calculation order, and validate inputs preventing invalid pricing conditions.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create estimate with multiple service items, markups, taxes, and hidden margins"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calculations are performed in specified order"
+      },
+      {
+        "type": "assertion",
+        "description": "Validate final pricing matches expected result"
+      },
+      {
+        "type": "action",
+        "description": "Introduce invalid input (negative prices, missing required fields)"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calculation engine rejects invalid data with error"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Automatic Backup Creation on Every Estimate Save",
+    "description": "Verify that each estimate save operation triggers automatic backup creation with historical versions stored and retrievable for recovery.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Save an estimate multiple times via API"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that backups are created automatically for each save"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify backup metadata includes timestamps and versioning"
+      },
+      {
+        "type": "action",
+        "description": "Restore estimate from a previous backup"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify restored data matches backup content"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "API Endpoint Security and Rate Limiting",
+    "description": "Verify that production nginx reverse proxy enforces rate limiting on API endpoints and supports optional basic authentication for secure access.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send rapid repeated requests to export and import endpoints"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify rate limiting triggers HTTP 429 Too Many Requests responses"
+      },
+      {
+        "type": "action",
+        "description": "Attempt API call without basic auth if enabled"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify requests are denied with 401 Unauthorized"
+      },
+      {
+        "type": "action",
+        "description": "Repeat calls with valid basic auth"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify requests succeed when authenticated"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Backward Compatibility File Storage and SQLite Switching",
+    "description": "Verify that switching STORAGE_TYPE environment variable properly toggles between file-based and SQLite storage, maintaining data consistency and accessibility.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Set STORAGE_TYPE=file and start application"
+      },
+      {
+        "type": "action",
+        "description": "Create new estimate and save"
+      },
+      {
+        "type": "action",
+        "description": "Stop application, set STORAGE_TYPE=sqlite, start application"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify existing data is accessible and consistent in SQLite storage"
+      },
+      {
+        "type": "action",
+        "description": "Create and save estimate with SQLite storage"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify data persists correctly"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Comprehensive API Endpoint Success Rate",
+    "description": "Verify that all core API endpoints for exporting, importing, saving, and backups respond with expected success status in at least 95% of automated test runs.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Run full automated test suite including export, import, transactional save tests"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify test suite pass rate is at least 95%"
+      }
+    ]
+  }
+]

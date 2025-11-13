@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "list_all_catalogs",
+    "description": "Verify that the GET /api/catalog endpoint returns a 200 status code and an array of all catalog objects stored in the SQLite database."
+  },
+  {
+    "id": "TC002",
+    "title": "get_specific_catalog_by_filename",
+    "description": "Verify that the GET /api/catalog/{filename} endpoint returns the correct catalog data for a valid filename with a 200 status code, and returns 404 for a non-existent filename."
+  },
+  {
+    "id": "TC003",
+    "title": "save_update_catalog",
+    "description": "Verify that the POST /api/catalog/{filename} endpoint successfully saves or updates a catalog with valid JSON data and returns a 200 status code, and returns 500 on error."
+  },
+  {
+    "id": "TC004",
+    "title": "delete_catalog",
+    "description": "Verify that the DELETE /api/catalog/{filename} endpoint deletes the specified catalog and returns a 200 status code."
+  },
+  {
+    "id": "TC005",
+    "title": "list_all_estimates_with_metadata",
+    "description": "Verify that the GET /api/estimates endpoint returns a 200 status code and an array of all estimates with their metadata."
+  },
+  {
+    "id": "TC006",
+    "title": "save_update_estimate_with_atomic_transaction",
+    "description": "Verify that the POST /api/estimates/{filename} endpoint saves or updates an estimate atomically with its backup using a three-phase commit pattern, returns 200 on success, 409 on conflict, and 500 on error."
+  },
+  {
+    "id": "TC007",
+    "title": "rename_estimate_file",
+    "description": "Verify that the PUT /api/estimates/{oldFilename}/rename endpoint renames an estimate file to a new filename and returns a 200 status code with the new filename."
+  },
+  {
+    "id": "TC008",
+    "title": "create_manual_backup",
+    "description": "Verify that the POST /api/backups/{id} endpoint creates a manual backup for the specified estimate ID and returns a 200 status code."
+  },
+  {
+    "id": "TC009",
+    "title": "export_all_data_to_json",
+    "description": "Verify that the GET /api/export/all endpoint exports all project data including backups as a complete JSON file and returns a 200 status code."
+  },
+  {
+    "id": "TC010",
+    "title": "get_database_statistics",
+    "description": "Verify that the GET /api/stats endpoint returns database statistics including counts and size with a 200 status code."
+  }
+]

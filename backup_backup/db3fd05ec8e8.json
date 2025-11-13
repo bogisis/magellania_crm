@@ -1,0 +1,149 @@
+{
+  "id": "db3fd05ec8e8",
+  "version": "1.1.0",
+  "timestamp": "2025-10-15T14:34:45.336Z",
+  "clientName": "",
+  "clientPhone": "",
+  "clientEmail": "",
+  "paxCount": 27,
+  "tourStart": "",
+  "tourEnd": "",
+  "services": [
+    {
+      "id": "1759318492125",
+      "name": "Экскурсия по смотровым Torres del Paine + Трансфер в Эль Чальтен",
+      "description": "Экскурсия по смотровым Torres del Paine + Трансфер в Эль Чальтен",
+      "day": 10,
+      "price": 1408,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "Onteaiken",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759318322755",
+      "name": "Трансфер к старту трека Башни Торрес",
+      "description": "Трансфер К старту трека Башни Торрес",
+      "day": 9,
+      "price": 340,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "Onteaiken",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759318262622",
+      "name": "Трансфер Эль калафате - Торрес дель Пайне",
+      "description": "Трансфер Эль калафате - Торрес дель Пайне",
+      "day": 8,
+      "price": 1027,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "Onteaiken",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759318053183",
+      "name": "Трансфер Эль Чальтен / Аэропорт",
+      "description": "",
+      "day": 12,
+      "price": 575,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "Локалы",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759317935647",
+      "name": "Трансфер Аэропорт / Отель",
+      "description": "Эль калафате",
+      "day": 6,
+      "price": 0,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "Локалы",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316816578",
+      "name": "Трансфер к началу треккинга на Эсмеральду",
+      "description": "",
+      "day": 5,
+      "price": 35,
+      "quantity": 15,
+      "markup": 0,
+      "contractor": "Dani",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316784211",
+      "name": "Экскурсия к пингвинам",
+      "description": "Не запрашивалась",
+      "day": 4,
+      "price": 0,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316650641",
+      "name": "Трансфер Отель / Порт и обратно",
+      "description": "",
+      "day": 2,
+      "price": 30,
+      "quantity": 15,
+      "markup": 0,
+      "contractor": "Dani",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316570172",
+      "name": "Входные билеты в Национальны парк Огненная земля (Покупаются отдельно от экскурсии)",
+      "description": "Входные билеты в Национальны парк Огненная земля (Покупаются отдельно от экскурсии)",
+      "day": 3,
+      "price": 35,
+      "quantity": 15,
+      "markup": 0,
+      "contractor": "",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316514321",
+      "name": "Экскурсия в Национальный парк \"Огненная земля\"",
+      "description": "",
+      "day": 3,
+      "price": 890,
+      "quantity": 1,
+      "markup": 0,
+      "contractor": "",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316464138",
+      "name": "Трансфер Отель / Аэропорт в центре  в одну сторону",
+      "description": "Трансфер Аропорт / Отель в центре  в одну сторону",
+      "day": 4,
+      "price": 15,
+      "quantity": 15,
+      "markup": 0,
+      "contractor": "Dani",
+      "excludeFromMarkup": false
+    },
+    {
+      "id": "1759316444421",
+      "name": "Трансфер Аропорт / Отель в центре  в одну сторону",
+      "description": "Трансфер Аропорт / Отель в центре  в одну сторону",
+      "day": 1,
+      "price": 15,
+      "quantity": 15,
+      "markup": 0,
+      "contractor": "Dani",
+      "excludeFromMarkup": false
+    }
+  ],
+  "hiddenMarkup": 0,
+  "taxRate": 0,
+  "programDescription": "",
+  "quoteComments": ""
+}

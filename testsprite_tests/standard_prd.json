@@ -1,0 +1,441 @@
+{
+  "meta": {
+    "project": "Quote Calculator v3.0",
+    "date": "2025-10-29",
+    "prepared_by": "Claude Code Assistant"
+  },
+  "product_overview": "Quote Calculator v3.0 is a production-ready full-stack application designed for generating and managing commercial proposals in the travel industry. It features a robust backend with Express.js and SQLite storage, supports transactional operations for data integrity, and provides advanced data export/import capabilities for backup and disaster recovery scenarios.",
+  "core_goals": [
+    "Provide reliable and atomic CRUD operations for service catalogs, estimates, backups, settings, and statistics.",
+    "Ensure data integrity via transactional save operations and optimistic locking to prevent data races and conflicts.",
+    "Support comprehensive data portability with export and import features in JSON and SQLite binary formats.",
+    "Offer robust error handling and recovery with centralized error boundary logic.",
+    "Enable seamless deployment and scaling with Docker and nginx configurations.",
+    "Facilitate future multi-tenancy scalability and architectural modularity."
+  ],
+  "key_features": [
+    "Catalog Management API with CRUD operations for service templates stored in SQLite.",
+    "Estimate Management API supporting atomic transactions for saving estimates with backup synchronization.",
+    "Backup Management API allowing creation, listing, and restoration of estimate backups.",
+    "Export/Import API supporting full data export to JSON, SQLite database file export, and JSON data imports with validation and partial failure handling.",
+    "Settings Management API for persisting application configurations.",
+    "Statistics API for database health monitoring and statistics reporting.",
+    "ErrorBoundary class providing centralized error handling, recovery strategies, and logging.",
+    "Transliterate utility with advanced edge case handling for safe filename generation.",
+    "Transactional save methods implementing three-phase commit pattern for atomicity.",
+    "Autosave mechanism with debounce and transaction support.",
+    "Docker-based deployment with multi-environment support (development, production, staging) including automated backups and zero-downtime deployment.",
+    "Secure deployment configurations with nginx reverse proxy, SSL via Let's Encrypt, rate limiting, and optional basic authentication."
+  ],
+  "user_flow_summary": [
+    "User imports or loads an existing estimate or catalog via UI or API, triggering data validation and state updates.",
+    "User edits estimates and services; autosave triggers debounced transactional saves to backend storage ensuring atomic backup synchronization.",
+    "User can manually save, rename, or delete estimates and catalogs via UI, with backend APIs ensuring data consistency and atomic operations.",
+    "User exports all project data including backups as JSON or SQLite database files for backup or migration purposes.",
+    "User imports data from JSON exports, with validation and partial failure handling, ensuring recovery from backups.",
+    "Administrators deploy application via Docker environments with staged promotion from staging to production, using CI/CD workflows with approval gates.",
+    "ErrorBoundary manages runtime exceptions gracefully, attempts recovery, and logs issues for developer troubleshooting."
+  ],
+  "validation_criteria": [
+    "All CRUD API endpoints for catalogs, estimates, backups, settings, and statistics respond correctly, with HTTP 200 on success and appropriate error codes otherwise.",
+    "Transactional save operations correctly implement three-phase commit ensuring atomicity of estimate and backup saves.",
+    "Export API endpoints produce correct and complete data files with accurate metadata.",
+    "Import API validates data format, handles partial failures gracefully, and updates storage accordingly without data loss.",
+    "ErrorBoundary captures and logs errors properly, triggers recovery strategies, and provides user notifications without application crashes.",
+    "Autosave operates with proper debounce and respects loading flags to avoid conflicts.",
+    "Docker deployment configurations for development, production, and cloud with SSL are functional with health checks passing and security features enabled.",
+    "Test coverage for new features meets or exceeds 90% coverage with all critical and high-priority tests passing.",
+    "Filename transliteration handles all edge cases including emoji removal, special character filtering, normalization, and length limiting consistent across the application.",
+    "Migration from file storage to SQLite completes successfully without data loss, as verified by migration reports."
+  ],
+  "code_summary": {
+    "tech_stack": [
+      "Node.js",
+      "Express.js 4.x",
+      "SQLite3 (better-sqlite3)",
+      "body-parser",
+      "cors",
+      "multer (file uploads)",
+      "winston (logging)"
+    ],
+    "features": [
+      {
+        "name": "Catalog Management API",
+        "description": "CRUD operations for service catalogs (templates) stored in SQLite database",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/catalog": {
+              "get": {
+                "summary": "List all catalogs",
+                "responses": {
+                  "200": {
+                    "description": "Array of catalog objects"
+                  }
+                }
+              }
+            },
+            "/api/catalog/{filename}": {
+              "get": {
+                "summary": "Get specific catalog by filename",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true,
+                    "schema": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Catalog data"
+                  },
+                  "404": {
+                    "description": "Not found"
+                  }
+                }
+              },
+              "post": {
+                "summary": "Save/update catalog",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "requestBody": {
+                  "required": true,
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  },
+                  "500": {
+                    "description": "Error"
+                  }
+                }
+              },
+              "delete": {
+                "summary": "Delete catalog",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Estimate Management API",
+        "description": "CRUD operations for estimates with atomic transactions (estimate + backup saved together)",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/estimates": {
+              "get": {
+                "summary": "List all estimates with metadata",
+                "responses": {
+                  "200": {
+                    "description": "Success with estimates array"
+                  }
+                }
+              }
+            },
+            "/api/estimates/{filename}": {
+              "get": {
+                "summary": "Get specific estimate by filename",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Estimate data"
+                  },
+                  "404": {
+                    "description": "Not found"
+                  }
+                }
+              },
+              "post": {
+                "summary": "Save/update estimate with atomic transaction",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "requestBody": {
+                  "required": true,
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  },
+                  "409": {
+                    "description": "Conflict"
+                  },
+                  "500": {
+                    "description": "Error"
+                  }
+                }
+              },
+              "delete": {
+                "summary": "Delete estimate",
+                "parameters": [
+                  {
+                    "name": "filename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  }
+                }
+              }
+            },
+            "/api/estimates/{oldFilename}/rename": {
+              "put": {
+                "summary": "Rename estimate file",
+                "parameters": [
+                  {
+                    "name": "oldFilename",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "requestBody": {
+                  "required": true,
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "properties": {
+                          "newFilename": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "responses": {
+                  "200": {
+                    "description": "Success with new filename"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Backup Management API",
+        "description": "Save and restore backups for estimates",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/backups/{id}": {
+              "get": {
+                "summary": "List all backups for specific estimate ID",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Array of backups"
+                  }
+                }
+              },
+              "post": {
+                "summary": "Create manual backup",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "requestBody": {
+                  "required": true
+                },
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  }
+                }
+              }
+            },
+            "/api/backups/{id}/restore": {
+              "post": {
+                "summary": "Restore estimate from backup",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "in": "path",
+                    "required": true
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "Restored data"
+                  },
+                  "404": {
+                    "description": "Not found"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Export/Import API",
+        "description": "Export all data to JSON or SQLite file, import from JSON",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/export/all": {
+              "get": {
+                "summary": "Export all data to JSON",
+                "responses": {
+                  "200": {
+                    "description": "Complete database export"
+                  }
+                }
+              }
+            },
+            "/api/export/database": {
+              "get": {
+                "summary": "Export raw SQLite database file",
+                "responses": {
+                  "200": {
+                    "description": "Binary SQLite file"
+                  }
+                }
+              }
+            },
+            "/api/import/all": {
+              "post": {
+                "summary": "Import data from JSON (replaces all data)",
+                "requestBody": {
+                  "required": true
+                },
+                "responses": {
+                  "200": {
+                    "description": "Import statistics"
+                  },
+                  "400": {
+                    "description": "Invalid data"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Settings Management API",
+        "description": "Application settings persistence",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/settings": {
+              "get": {
+                "summary": "Get application settings",
+                "responses": {
+                  "200": {
+                    "description": "Settings object"
+                  }
+                }
+              },
+              "post": {
+                "summary": "Save application settings",
+                "requestBody": {
+                  "required": true
+                },
+                "responses": {
+                  "200": {
+                    "description": "Success"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Statistics API",
+        "description": "Database statistics and health monitoring",
+        "files": [
+          "server-with-db.js",
+          "storage/SQLiteStorage.js"
+        ],
+        "api_doc": {
+          "paths": {
+            "/api/stats": {
+              "get": {
+                "summary": "Get database statistics",
+                "responses": {
+                  "200": {
+                    "description": "Database statistics including counts and size"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

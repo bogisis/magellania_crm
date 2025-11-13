@@ -1,0 +1,111 @@
+{
+  "timestamp": "2025-11-03T20:07:22.868Z",
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "http://localhost:3000/",
+      "error": "net::ERR_CONNECTION_REFUSED",
+      "timestamp": "2025-11-03T20:07:30.125Z"
+    }
+  ],
+  "uncaughtExceptions": [
+    {
+      "message": "page.screenshot: Target page, context or browser has been closed",
+      "stack": "page.screenshot: Target page, context or browser has been closed\n    at runComprehensiveTest (/Users/bogisis/Desktop/сметы/for_deploy copy/playwright-http-test.js:405:16)",
+      "timestamp": "2025-11-03T20:07:36.915Z"
+    }
+  ],
+  "testResults": [
+    {
+      "test": "Page Load via HTTP",
+      "status": "failed",
+      "error": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"networkidle\"\u001b[22m\n",
+      "timestamp": "2025-11-03T20:07:30.184Z"
+    },
+    {
+      "test": "External JS Files Loaded",
+      "status": "failed",
+      "error": "Some JS files not loaded",
+      "timestamp": "2025-11-03T20:07:30.207Z"
+    },
+    {
+      "test": "UI Element: PAX Count Input",
+      "status": "failed",
+      "error": "Element not found",
+      "timestamp": "2025-11-03T20:07:33.210Z"
+    },
+    {
+      "test": "UI Element: Hidden Markup Input",
+      "status": "failed",
+      "error": "Element not found",
+      "timestamp": "2025-11-03T20:07:36.212Z"
+    },
+    {
+      "test": "UI Element: Tax Rate Input",
+      "status": "failed",
+      "error": "Element not found",
+      "timestamp": "2025-11-03T20:07:36.911Z"
+    },
+    {
+      "test": "UI Element: Client Name Input",
+      "status": "failed",
+      "error": "Element not found",
+      "timestamp": "2025-11-03T20:07:36.912Z"
+    },
+    {
+      "test": "UI Element: Services List",
+      "status": "failed",
+      "error": "Element not found",
+      "timestamp": "2025-11-03T20:07:36.913Z"
+    },
+    {
+      "test": "PAX Count Change",
+      "status": "failed",
+      "error": "Error: page.fill: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.913Z"
+    },
+    {
+      "test": "Add Service",
+      "status": "failed",
+      "error": "Error: page.$$: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.913Z"
+    },
+    {
+      "test": "Edit Service",
+      "status": "failed",
+      "error": "Error: page.$: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.913Z"
+    },
+    {
+      "test": "Save Quote Button",
+      "status": "failed",
+      "error": "Error: page.$$: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.914Z"
+    },
+    {
+      "test": "Print Function",
+      "status": "failed",
+      "error": "Error: page.evaluate: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.914Z"
+    },
+    {
+      "test": "LocalStorage",
+      "status": "failed",
+      "error": "Error: page.evaluate: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.914Z"
+    },
+    {
+      "test": "Keyboard Shortcuts",
+      "status": "failed",
+      "error": "Error: keyboard.press: Target page, context or browser has been closed",
+      "timestamp": "2025-11-03T20:07:36.914Z"
+    }
+  ],
+  "summary": {
+    "totalTests": 14,
+    "passed": 0,
+    "failed": 14,
+    "errors": 1,
+    "errorRate": "100.00%"
+  }
+}

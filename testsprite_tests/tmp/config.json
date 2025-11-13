@@ -1,0 +1,16 @@
+{
+  "status": "commited",
+  "type": "backend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:4000",
+  "backendAuthType": "public",
+  "executionArgs": {
+    "projectName": "for_deploy copy",
+    "projectPath": "/Users/bogisis/Desktop/сметы/for_deploy copy",
+    "testIds": [],
+    "additionalInstruction": "",
+    "envs": {
+      "API_KEY": "sk-user-gASqUFqh7zZBMvUOifiesQz9Wm68v0-cLxyMfKWYVh11KyK0ZQCicrQhSqnax0qIR06wfrHS6ZoNF4bww4p_oFtArLTrYSknnrgn-9nacJzoY1SVfyEQ54qtFGT7lBYQ0bg"
+    }
+  }
+}

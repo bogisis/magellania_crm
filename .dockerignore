@@ -31,14 +31,25 @@ Dockerfile
 .DS_Store
 Thumbs.db
 
-# Data (не включаем в образ)
+# Data (не включаем в образ, будут монтированы как volumes)
 backup/*
 estimate/*.json
 catalog/*.json
+catalogs/*.json
 !catalog/catalog.json
 
-# Logs
+# SQLite databases (будут монтированы как volume)
+db/*.db
+db/*.db-wal
+db/*.db-shm
+
+
+# Logs (будут монтированы как volume)
+logs/
 *.log
+
+# Settings (будут монтированы как volume)
+settings/*.json
 
 # Scripts
 scripts/

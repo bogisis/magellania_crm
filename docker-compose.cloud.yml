@@ -1,0 +1,117 @@
+# Quote Calculator v3.0 - Cloud/VPS Docker Compose
+# Extends docker-compose.prod.yml and adds SSL/TLS with Let's Encrypt
+# For cloud/VPS deployment with HTTPS
+#
+# Prerequisites:
+#   1. Domain name pointing to your server IP
+#   2. Ports 80 and 443 open in firewall
+#   3. Set DOMAIN environment variable
+#
+# Usage:
+#   # Set your domain
+#   export DOMAIN=quotes.example.com
+#   export EMAIL=admin@example.com
+#
+#   # Initial setup (obtain SSL certificate)
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cloud.yml run --rm certbot
+#
+#   # Start services
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cloud.yml up -d
+#
+#   # Auto-renewal is handled by certbot service
+#
+# Features:
+#   - Let's Encrypt SSL/TLS certificates
+#   - Automatic certificate renewal
+#   - HTTPS redirect
+#   - HSTS security header
+#   - Production-ready security
+
+version: '3.8'
+
+services:
+  # ========== NGINX (Override for SSL) ==========
+  nginx:
+    volumes:
+      # Override SSL certificates volume to use certbot
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
+
+      # Add SSL-specific nginx config
+      - ./nginx/conf.d/ssl.conf:/etc/nginx/conf.d/ssl.conf:ro
+    environment:
+      - DOMAIN=${DOMAIN:-quotes.example.com}
+    labels:
+      - "traefik.enable=false"
+
+  # ========== CERTBOT (Let's Encrypt) ==========
+  certbot:
+    image: certbot/certbot:latest
+    container_name: quote-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    environment:
+      - DOMAIN=${DOMAIN:-quotes.example.com}
+      - EMAIL=${EMAIL:-admin@example.com}
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - quote-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ========== CERTBOT INITIAL SETUP ==========
+  # Run once to obtain initial certificate
+  # Usage: docker-compose run --rm certbot-init
+  certbot-init:
+    image: certbot/certbot:latest
+    container_name: quote-certbot-init
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    command: >
+      certonly --webroot --webroot-path=/var/www/certbot
+      --email ${EMAIL:-admin@example.com}
+      --agree-tos
+      --no-eff-email
+      --force-renewal
+      -d ${DOMAIN:-quotes.example.com}
+    environment:
+      - DOMAIN=${DOMAIN:-quotes.example.com}
+      - EMAIL=${EMAIL:-admin@example.com}
+    networks:
+      - quote-network
+    profiles:
+      - init  # Only run when explicitly requested
+
+# ========== VOLUMES ==========
+volumes:
+  certbot-etc:
+    name: quote-certbot-etc
+    labels:
+      environment: production
+      backup: required
+      description: Let's Encrypt SSL certificates
+
+  certbot-var:
+    name: quote-certbot-var
+    labels:
+      environment: production
+      backup: optional
+      description: Let's Encrypt working directory
+
+  certbot-webroot:
+    name: quote-certbot-webroot
+    labels:
+      environment: production
+      backup: not-required
+      description: Certbot challenge webroot

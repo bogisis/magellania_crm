@@ -1,0 +1,14 @@
+{
+  "id": "abc123def456",
+  "clientName": "Test Client",
+  "paxCount": 10,
+  "tourStart": "2025-11-01",
+  "services": [
+    {
+      "id": "1",
+      "name": "Test Service",
+      "price": 100,
+      "quantity": 1
+    }
+  ]
+}

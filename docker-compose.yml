@@ -6,27 +6,51 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: prod
       args:
-        NODE_ENV: production
+        NODE_VERSION: 18
     image: quote-calculator:latest
     container_name: quote-prod
     ports:
-      - "3005:3000"
+      - "4000:4000"
     volumes:
-      # Named volumes для данных
-      - prod-catalog:/app/catalog
-      - prod-estimate:/app/estimate
-      - prod-backup:/app/backup
+      # SQLite database (persistent)
+      - prod-db:/usr/src/app/db
+      # Winston logs (persistent)
+      - prod-logs:/usr/src/app/logs
+      # Catalogs (persistent)
+      - prod-catalog:/usr/src/app/catalogs
+      # Legacy file storage (для dual-write mode если нужно)
+      - prod-estimate:/usr/src/app/estimate
+      - prod-backup:/usr/src/app/backup
+      # Settings (persistent)
+      - prod-settings:/usr/src/app/settings
     environment:
       - NODE_ENV=production
-      - APP_ENV=production
-      - PORT=3000
+      - STORAGE_TYPE=sqlite
+      - DUAL_WRITE_MODE=false
+      - LOG_LEVEL=info
+      - LOG_CONSOLE=false
+      - PORT=4000
     restart: unless-stopped
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - com.centurylinklabs.watchtower.stop-timeout=30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/api/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -37,34 +61,49 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: staging
       args:
-        NODE_ENV: staging
+        NODE_VERSION: 18
     image: quote-calculator:staging
     container_name: quote-staging
     ports:
-      - "3006:3000"
+      - "4001:4000"
     volumes:
       # Staging свои volumes
-      - staging-catalog:/app/catalog
-      - staging-estimate:/app/estimate
-      - staging-backup:/app/backup
+      - staging-db:/usr/src/app/db
+      - staging-logs:/usr/src/app/logs
+      - staging-catalog:/usr/src/app/catalogs
+      - staging-estimate:/usr/src/app/estimate
+      - staging-backup:/usr/src/app/backup
+      - staging-settings:/usr/src/app/settings
       # Read-only доступ к production (для копирования)
-      - prod-catalog:/app/prod-catalog:ro
-      - prod-estimate:/app/prod-estimate:ro
-      - prod-backup:/app/prod-backup:ro
+      - prod-db:/usr/src/app/prod-db:ro
+      - prod-catalog:/usr/src/app/prod-catalog:ro
     environment:
       - NODE_ENV=staging
-      - APP_ENV=staging
-      - PORT=3000
-      - COPY_FROM_PROD=true  # Копировать данные при старте
+      - STORAGE_TYPE=sqlite
+      - DUAL_WRITE_MODE=false
+      - LOG_LEVEL=debug
+      - LOG_CONSOLE=true
+      - PORT=4000
     restart: unless-stopped
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - com.centurylinklabs.watchtower.stop-timeout=30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - quote-production
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/api/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -76,7 +115,9 @@ services:
     container_name: quote-backup
     restart: always
     volumes:
-      - prod-catalog:/backup/catalog:ro
+      - prod-db:/backup/db:ro
+      - prod-logs:/backup/logs:ro
+      - prod-catalog:/backup/catalogs:ro
       - prod-estimate:/backup/estimate:ro
       - prod-backup:/backup/backup:ro
       - ./backups:/archive  # Бэкапы на хосте
@@ -90,6 +131,18 @@ services:
 # ========== VOLUMES ==========
 volumes:
   # Production volumes
+  prod-db:
+    name: quote-prod-db
+    labels:
+      environment: production
+      backup: required
+      data-type: sqlite-database
+  prod-logs:
+    name: quote-prod-logs
+    labels:
+      environment: production
+      backup: optional
+      data-type: winston-logs
   prod-catalog:
     name: quote-prod-catalog
     labels:
@@ -105,8 +158,21 @@ volumes:
     labels:
       environment: production
       backup: required
+  prod-settings:
+    name: quote-prod-settings
+    labels:
+      environment: production
+      backup: required
 
   # Staging volumes
+  staging-db:
+    name: quote-staging-db
+    labels:
+      environment: staging
+  staging-logs:
+    name: quote-staging-logs
+    labels:
+      environment: staging
   staging-catalog:
     name: quote-staging-catalog
     labels:
@@ -117,5 +183,9 @@ volumes:
       environment: staging
   staging-backup:
     name: quote-staging-backup
+    labels:
+      environment: staging
+  staging-settings:
+    name: quote-staging-settings
     labels:
       environment: staging

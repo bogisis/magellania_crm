@@ -52,51 +52,78 @@ class APIClient {
         return result.data;
     }
 
-    async saveEstimate(data, filename) {
-        if (!filename) {
-            // Генерация имени файла из данных клиента
-            const clientName = data.clientName || 'Unnamed';
-            const date = new Date().toISOString().split('T')[0];
-            filename = `${clientName}_${date}.json`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    async saveEstimate(id, data) {
+        // ID-First архитектура: используем ID как первичный идентификатор
+        if (!id) {
+            throw new Error('ID is required for saveEstimate');
         }
 
-        const response = await fetch(`${this.baseURL}/api/estimates/${filename}`, {
+        // Используем ID в URL (а не filename)
+        const response = await fetch(`${this.baseURL}/api/estimates/${id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to save estimate: ${response.status} ${errorText}`);
+        }
+
         const result = await response.json();
         if (!result.success) throw new Error(result.error);
 
-        this.currentEstimateFilename = filename;
-        return { ...result, filename };
+        this.currentEstimateId = id;
+        return { ...result, id };
     }
 
-    async deleteEstimate(filename) {
-        const response = await fetch(`${this.baseURL}/api/estimates/${filename}`, {
-            method: 'DELETE'
+    async saveBatch(items) {
+        const response = await fetch(`${this.baseURL}/api/estimates/batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items })
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.error);
+        return result;
+    }
 
-        if (this.currentEstimateFilename === filename) {
-            this.currentEstimateFilename = null;
+    async deleteEstimate(id) {
+        // ID-First: используем ID для удаления
+        const response = await fetch(`${this.baseURL}/api/estimates/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to delete estimate: ${response.status} ${errorText}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+
+        if (this.currentEstimateId === id) {
+            this.currentEstimateId = null;
         }
         return result;
     }
 
-    async renameEstimate(oldFilename, newFilename) {
-        const response = await fetch(`${this.baseURL}/api/estimates/${oldFilename}/rename`, {
+    async renameEstimate(id, newFilename) {
+        // ID-First: используем ID для идентификации, меняем только filename в metadata
+        const response = await fetch(`${this.baseURL}/api/estimates/${id}/rename`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newFilename })
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to rename estimate: ${response.status} ${errorText}`);
+        }
+
         const result = await response.json();
         if (!result.success) throw new Error(result.error);
 
-        if (this.currentEstimateFilename === oldFilename) {
-            this.currentEstimateFilename = newFilename;
-        }
         return result;
     }
 
@@ -207,14 +234,15 @@ class APIClient {
     /**
      * Commit транзакции - atomic rename временных файлов в финальные
      */
-    async commitTransaction(transactionId, filename, backupId) {
+    async commitTransaction(transactionId, filename, backupId, data) {
         const response = await fetch(`${this.baseURL}/api/transaction/commit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 transactionId,
                 estimateFilename: filename,
-                backupId: backupId
+                backupId: backupId,
+                data: data  // ✅ ДОБАВЛЕНО: передаем данные
             })
         });
 
@@ -279,7 +307,8 @@ class APIClient {
             const result = await this.commitTransaction(
                 transaction.transactionId,
                 transaction.filename,
-                transaction.backupId
+                transaction.backupId,
+                data  // ✅ ДОБАВЛЕНО: передаем данные
             );
 
             // Успех - обновляем текущее имя файла
@@ -359,6 +388,88 @@ class APIClient {
         const result = await response.json();
         if (!result.success) throw new Error(result.error);
         return result;
+    }
+
+    // ============ Export/Import (Data Portability) ============
+
+    /**
+     * Export all data (estimates, catalogs, settings, backups) as JSON
+     * @param {boolean} includeBackups - Include backups in export (default: true)
+     * @returns {Promise<Object>} Export data object
+     */
+    async exportAll(includeBackups = true) {
+        const url = `${this.baseURL}/api/export/all?includeBackups=${includeBackups}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.error || 'Export failed');
+        }
+
+        return await response.json();
+    }
+
+    /**
+     * Import data from JSON export
+     * @param {Object} importData - Export data object from exportAll()
+     * @returns {Promise<Object>} Import result with imported/failed counts
+     */
+    async importAll(importData) {
+        const response = await fetch(`${this.baseURL}/api/import/all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(importData)
+        });
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        return result;
+    }
+
+    /**
+     * Export SQLite database as binary file
+     * @returns {Promise<Blob>} Database file as blob
+     */
+    async exportDatabase() {
+        const response = await fetch(`${this.baseURL}/api/export/database`);
+
+        if (!response.ok) {
+            // Try to parse error message
+            try {
+                const result = await response.json();
+                throw new Error(result.error || 'Database export failed');
+            } catch (e) {
+                throw new Error(`Database export failed: ${response.status} ${response.statusText}`);
+            }
+        }
+
+        return await response.blob();
+    }
+
+    /**
+     * Helper: Download blob as file (triggers browser download)
+     * @param {Blob} blob - File blob
+     * @param {string} filename - Suggested filename
+     */
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Helper: Download JSON object as file
+     * @param {Object} data - JSON data
+     * @param {string} filename - Suggested filename
+     */
+    downloadJSON(data, filename) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        this.downloadBlob(blob, filename);
     }
 
     // ============ Утилиты ============

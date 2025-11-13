@@ -1,0 +1,344 @@
+# Quote Calculator v3.0 - VPS Deployment Configuration
+# Production + Staging на одном VPS сервере
+#
+# Usage:
+#   docker-compose -f docker-compose.vps.yml up -d
+#
+# Prerequisites:
+#   - .env.production файл с настройками production
+#   - .env.staging файл с настройками staging
+#   - nginx/conf.d/quotes.conf с конфигурацией для обоих доменов
+#
+# Features:
+#   - Production контейнер (порт 4000)
+#   - Staging контейнер для финальных тестов (порт 4001)
+#   - Nginx reverse proxy с SSL support
+#   - Let's Encrypt certbot для автообновления SSL
+#   - Раздельные volumes для production и staging
+#   - Health checks для мониторинга
+#   - Graceful restarts
+
+version: '3.8'
+
+services:
+  # ========== PRODUCTION КОНТЕЙНЕР ==========
+  quote-production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+      args:
+        NODE_VERSION: 18
+    image: quote-calculator:production
+    container_name: quote-production
+    env_file: .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - STORAGE_TYPE=sqlite
+      - DB_PATH=/app/db/quotes.db
+      - LOG_LEVEL=info
+      - LOG_CONSOLE=false
+    volumes:
+      # Persistent data
+      - quote-prod-db:/app/db
+      - quote-prod-logs:/app/logs
+      - quote-prod-catalog:/app/catalogs
+      - quote-prod-estimate:/app/estimate
+      - quote-prod-backup:/app/backup
+      - quote-prod-settings:/app/settings
+    networks:
+      - quote-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.quote-calculator.environment=production"
+      - "com.quote-calculator.version=3.0.0"
+
+  # ========== STAGING КОНТЕЙНЕР (финальные тесты) ==========
+  quote-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+      args:
+        NODE_VERSION: 18
+    image: quote-calculator:staging
+    container_name: quote-staging
+    env_file: .env.staging
+    environment:
+      - NODE_ENV=staging
+      - PORT=4001
+      - STORAGE_TYPE=sqlite
+      - DB_PATH=/app/db/quotes.db
+      - LOG_LEVEL=debug
+      - LOG_CONSOLE=true
+    volumes:
+      # Separate persistent data для staging
+      - quote-staging-db:/app/db
+      - quote-staging-logs:/app/logs
+      - quote-staging-catalog:/app/catalogs
+      - quote-staging-estimate:/app/estimate
+      - quote-staging-backup:/app/backup
+      - quote-staging-settings:/app/settings
+    networks:
+      - quote-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    labels:
+      - "com.quote-calculator.environment=staging"
+      - "com.quote-calculator.version=3.0.0"
+
+  # ========== NGINX REVERSE PROXY ==========
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: quote-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx configuration
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+      # SSL certificates (Let's Encrypt)
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
+
+      # Logs
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - quote-production
+      - quote-staging
+    restart: unless-stopped
+    networks:
+      - quote-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.quote-calculator.component=reverse-proxy"
+
+  # ========== CERTBOT (Let's Encrypt SSL) ==========
+  certbot:
+    image: certbot/certbot:latest
+    container_name: quote-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    # Автоматическое обновление сертификатов каждые 12 часов
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+    networks:
+      - quote-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    labels:
+      - "com.quote-calculator.component=ssl-management"
+
+  # ========== CERTBOT INITIAL SETUP (run once) ==========
+  # Используется ТОЛЬКО для первого получения SSL сертификата
+  # Usage: docker-compose -f docker-compose.vps.yml run --rm certbot-init
+  certbot-init:
+    image: certbot/certbot:latest
+    container_name: quote-certbot-init
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    command: >
+      certonly --webroot --webroot-path=/var/www/certbot
+      --email ${CERTBOT_EMAIL:-admin@example.com}
+      --agree-tos
+      --no-eff-email
+      --force-renewal
+      -d ${DOMAIN:-yourdomain.com}
+      -d ${STAGING_DOMAIN:-staging.yourdomain.com}
+    networks:
+      - quote-network
+    profiles:
+      - init  # Запускается только при явном вызове
+
+# ========== NETWORKS ==========
+networks:
+  quote-network:
+    driver: bridge
+    name: quote-vps-network
+    labels:
+      environment: vps
+      description: Network for Quote Calculator VPS deployment
+
+# ========== VOLUMES ==========
+volumes:
+  # Production volumes
+  quote-prod-db:
+    name: quote-prod-db
+    labels:
+      environment: production
+      backup: required
+      description: Production SQLite database
+
+  quote-prod-logs:
+    name: quote-prod-logs
+    labels:
+      environment: production
+      backup: optional
+      description: Production application logs
+
+  quote-prod-catalog:
+    name: quote-prod-catalog
+    labels:
+      environment: production
+      backup: required
+      description: Production service catalog
+
+  quote-prod-estimate:
+    name: quote-prod-estimate
+    labels:
+      environment: production
+      backup: required
+      description: Production estimates (legacy file storage)
+
+  quote-prod-backup:
+    name: quote-prod-backup
+    labels:
+      environment: production
+      backup: required
+      description: Production backups (legacy file storage)
+
+  quote-prod-settings:
+    name: quote-prod-settings
+    labels:
+      environment: production
+      backup: required
+      description: Production settings
+
+  # Staging volumes
+  quote-staging-db:
+    name: quote-staging-db
+    labels:
+      environment: staging
+      backup: optional
+      description: Staging SQLite database
+
+  quote-staging-logs:
+    name: quote-staging-logs
+    labels:
+      environment: staging
+      backup: not-required
+      description: Staging application logs
+
+  quote-staging-catalog:
+    name: quote-staging-catalog
+    labels:
+      environment: staging
+      backup: optional
+      description: Staging service catalog
+
+  quote-staging-estimate:
+    name: quote-staging-estimate
+    labels:
+      environment: staging
+      backup: optional
+      description: Staging estimates
+
+  quote-staging-backup:
+    name: quote-staging-backup
+    labels:
+      environment: staging
+      backup: optional
+      description: Staging backups
+
+  quote-staging-settings:
+    name: quote-staging-settings
+    labels:
+      environment: staging
+      backup: optional
+      description: Staging settings
+
+  # Nginx volumes
+  nginx-logs:
+    name: quote-nginx-logs
+    labels:
+      environment: shared
+      backup: optional
+      description: Nginx access and error logs
+
+  # Certbot volumes
+  certbot-etc:
+    name: quote-certbot-etc
+    labels:
+      environment: shared
+      backup: required
+      description: Let's Encrypt SSL certificates
+
+  certbot-var:
+    name: quote-certbot-var
+    labels:
+      environment: shared
+      backup: optional
+      description: Let's Encrypt working directory
+
+  certbot-webroot:
+    name: quote-certbot-webroot
+    labels:
+      environment: shared
+      backup: not-required
+      description: Certbot challenge webroot for ACME protocol
