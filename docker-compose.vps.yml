@@ -205,12 +205,12 @@ services:
       - certbot-webroot:/var/www/certbot
     command: >
       certonly --webroot --webroot-path=/var/www/certbot
-      --email ${CERTBOT_EMAIL:-admin@example.com}
+      --email ${CERTBOT_EMAIL:-admin@magellania.net}
       --agree-tos
       --no-eff-email
       --force-renewal
-      -d ${DOMAIN:-yourdomain.com}
-      -d ${STAGING_DOMAIN:-staging.yourdomain.com}
+      -d ${DOMAIN:-crm.magellania.net}
+      -d ${STAGING_DOMAIN:-staging.magellania.net}
     networks:
       - quote-network
     profiles:
