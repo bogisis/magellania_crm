@@ -169,7 +169,7 @@ docker --version
 
 ```bash
 # Docker Compose v2 устанавливается как plugin
-sudo apt install docker-compose-plugin -y
+sudo apt install docker compose-plugin -y
 
 # Проверка
 docker compose version

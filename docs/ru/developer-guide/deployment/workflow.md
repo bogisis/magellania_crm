@@ -141,7 +141,7 @@ docker logs quote-staging -f
 npm run staging:down
 
 # Или остановить и удалить volumes
-docker-compose -f docker-compose.staging.yml down -v
+docker compose -f docker-compose.staging.yml down -v
 ```
 
 ---
@@ -195,10 +195,10 @@ cd /opt/quote-calculator
 git pull origin main
 
 # Пересобрать staging образ
-docker-compose -f docker-compose.vps.yml build quote-staging
+docker compose -f docker-compose.vps.yml build quote-staging
 
 # Перезапустить staging контейнер
-docker-compose -f docker-compose.vps.yml up -d --force-recreate quote-staging
+docker compose -f docker-compose.vps.yml up -d --force-recreate quote-staging
 
 # Проверка health
 curl http://localhost:4001/health
@@ -318,11 +318,11 @@ cd /opt/quote-calculator
 git pull origin main
 
 # 2. Build новый образ с временным тегом
-docker-compose -f docker-compose.vps.yml build quote-production
+docker compose -f docker-compose.vps.yml build quote-production
 
 # 3. Blue-Green deployment (если настроено)
 # Или Rolling update:
-docker-compose -f docker-compose.vps.yml up -d --no-deps --build quote-production
+docker compose -f docker-compose.vps.yml up -d --no-deps --build quote-production
 
 # 4. Health check
 curl http://localhost:4000/health
@@ -343,10 +343,10 @@ docker stop quote-production
 
 # 3. Pull и rebuild
 git pull origin main
-docker-compose -f docker-compose.vps.yml build quote-production
+docker compose -f docker-compose.vps.yml build quote-production
 
 # 4. Запустить
-docker-compose -f docker-compose.vps.yml up -d quote-production
+docker compose -f docker-compose.vps.yml up -d quote-production
 
 # 5. Health check
 curl http://localhost:4000/health
@@ -449,8 +449,8 @@ cd $PROJECT_DIR
 git pull origin main
 
 # Build и restart
-docker-compose -f docker-compose.vps.yml build quote-$DEPLOY_ENV
-docker-compose -f docker-compose.vps.yml up -d --no-deps quote-$DEPLOY_ENV
+docker compose -f docker-compose.vps.yml build quote-$DEPLOY_ENV
+docker compose -f docker-compose.vps.yml up -d --no-deps quote-$DEPLOY_ENV
 
 # Health check
 sleep 5
@@ -533,10 +533,10 @@ git log --oneline -5  # Найти хороший коммит
 git reset --hard abc1234
 
 # 2. Rebuild
-docker-compose -f docker-compose.vps.yml build quote-production
+docker compose -f docker-compose.vps.yml build quote-production
 
 # 3. Restart
-docker-compose -f docker-compose.vps.yml up -d --force-recreate quote-production
+docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 
 # 4. Health check
 curl http://localhost:4000/health
@@ -570,13 +570,13 @@ npm run db:import /tmp/rollback.db vps-production
 ssh deployer@your-vps-ip
 cd /opt/quote-calculator
 git reset --hard <previous-good-commit>
-docker-compose -f docker-compose.vps.yml build quote-production
+docker compose -f docker-compose.vps.yml build quote-production
 
 # 2. Откат БД
 npm run db:import <backup-file> vps-production
 
 # 3. Restart
-docker-compose -f docker-compose.vps.yml up -d --force-recreate quote-production
+docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 
 # 4. Проверка
 curl https://yourdomain.com/health
@@ -591,7 +591,7 @@ docker images | grep quote
 
 # Использовать предыдущий образ
 docker tag quote-calculator:previous quote-calculator:latest
-docker-compose -f docker-compose.vps.yml up -d --force-recreate quote-production
+docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 ```
 
 ---

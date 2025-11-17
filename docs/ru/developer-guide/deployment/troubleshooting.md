@@ -73,7 +73,7 @@ sudo ufw allow 443/tcp
 docker ps | grep nginx
 
 # Если остановлен - запустить
-docker-compose -f docker-compose.vps.yml up -d nginx
+docker compose -f docker-compose.vps.yml up -d nginx
 
 # Проверить логи
 docker logs quote-nginx --tail 50
@@ -88,10 +88,10 @@ docker exec quote-nginx nginx -t
 docker exec quote-nginx ls -la /etc/letsencrypt/live/
 
 # Если сертификата нет - получить
-docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
+docker compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 
 # Перезапустить Nginx
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 ```
 
 ---
@@ -111,7 +111,7 @@ Nginx returns: 502 Bad Gateway
 docker ps | grep quote-production
 
 # Если остановлен
-docker-compose -f docker-compose.vps.yml up -d quote-production
+docker compose -f docker-compose.vps.yml up -d quote-production
 
 # Проверить логи запуска
 docker logs quote-production
@@ -127,7 +127,7 @@ cat .env.production | grep PORT
 # Должно быть: PORT=4000
 
 # Если неправильно - исправить и перезапустить
-docker-compose -f docker-compose.vps.yml restart quote-production
+docker compose -f docker-compose.vps.yml restart quote-production
 ```
 
 **Причина 3: Проблема с Docker сетью**
@@ -139,8 +139,8 @@ docker network inspect quote-vps-network
 docker exec quote-nginx ping quote-production -c 1
 
 # Если не пингуется - пересоздать сеть
-docker-compose -f docker-compose.vps.yml down
-docker-compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml up -d
 ```
 
 **Причина 4: Backend упал из-за ошибки**
@@ -150,7 +150,7 @@ docker logs quote-production --tail 100
 
 # Найти ошибку и исправить
 # Перезапустить после фикса
-docker-compose -f docker-compose.vps.yml restart quote-production
+docker compose -f docker-compose.vps.yml restart quote-production
 ```
 
 ---
@@ -334,9 +334,9 @@ PORT=
 docker volume inspect quote-prod-db
 
 # Пересоздать volume
-docker-compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml down
 docker volume rm quote-prod-db
-docker-compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml up -d
 ```
 
 ---
@@ -444,9 +444,9 @@ Error: ENOENT: no such file or directory, open '/app/db/quotes.db'
 docker exec quote-production mkdir -p /app/db
 
 # Или пересоздать volume
-docker-compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml down
 docker volume rm quote-prod-db
-docker-compose -f docker-compose.vps.yml up -d quote-production
+docker compose -f docker-compose.vps.yml up -d quote-production
 
 # Проверить
 docker exec quote-production ls -la /app/db/
@@ -469,10 +469,10 @@ docker exec quote-production ls -la /app/db/
 docker exec quote-nginx ls -la /etc/letsencrypt/live/
 
 # Если пусто - получить сертификат
-docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
+docker compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 
 # Перезапустить Nginx
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 ```
 
 **Причина 2: Сертификат истёк**
@@ -485,7 +485,7 @@ echo | openssl s_client -connect yourdomain.com:443 2>/dev/null | \
 docker exec quote-certbot certbot renew --force-renewal
 
 # Перезапустить Nginx
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 ```
 
 **Причина 3: Неправильный домен в сертификате**
@@ -495,7 +495,7 @@ echo | openssl s_client -connect yourdomain.com:443 2>/dev/null | \
   openssl x509 -noout -text | grep "DNS:"
 
 # Если не совпадает - получить новый для правильного домена
-docker-compose -f docker-compose.vps.yml exec certbot \
+docker compose -f docker-compose.vps.yml exec certbot \
   certbot certonly --webroot --webroot-path=/var/www/certbot \
   -d yourdomain.com -d www.yourdomain.com
 
@@ -519,13 +519,13 @@ Let's Encrypt rate limit: **50 сертификатов в неделю** на �
 **Использовать staging сервер для тестирования:**
 ```bash
 # Получить staging сертификат (не считается в лимите)
-docker-compose -f docker-compose.vps.yml exec certbot \
+docker compose -f docker-compose.vps.yml exec certbot \
   certbot certonly --webroot --webroot-path=/var/www/certbot \
   --server https://acme-staging-v02.api.letsencrypt.org/directory \
   -d yourdomain.com
 
 # После успешного теста - получить production сертификат
-docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
+docker compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 ```
 
 **Или подождать:**
@@ -588,8 +588,8 @@ docker network ls
 docker network inspect quote-vps-network
 
 # Пересоздать сеть
-docker-compose -f docker-compose.vps.yml down
-docker-compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml up -d
 
 # Проверить резолюцию
 docker exec quote-nginx nslookup quote-production
@@ -719,7 +719,7 @@ echo ""
 
 echo "=== Docker Status ==="
 docker --version
-docker-compose --version
+docker compose --version
 docker ps
 echo ""
 
@@ -878,15 +878,15 @@ docker logs quote-production -f
 npm run db:export:vps-production
 
 # 2. Остановить все контейнеры
-docker-compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml down
 
 # 3. Удалить все (ОСТОРОЖНО!)
 docker system prune -a --volumes
 
 # 4. Пересоздать всё с нуля
 git pull origin main
-docker-compose -f docker-compose.vps.yml build
-docker-compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml build
+docker compose -f docker-compose.vps.yml up -d
 
 # 5. Восстановить данные
 npm run db:import <backup-file> vps-production

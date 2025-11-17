@@ -442,14 +442,14 @@ nano nginx/conf.d/quotes.conf
 
 ```bash
 # После запуска контейнеров
-docker-compose -f docker-compose.vps.yml exec nginx nginx -t
+docker compose -f docker-compose.vps.yml exec nginx nginx -t
 
 # Вывод должен быть:
 # nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
 # nginx: configuration file /etc/nginx/nginx.conf test is successful
 
 # Перезагрузка при изменениях
-docker-compose -f docker-compose.vps.yml exec nginx nginx -s reload
+docker compose -f docker-compose.vps.yml exec nginx nginx -s reload
 ```
 
 ---
@@ -483,7 +483,7 @@ source ~/.bashrc
 - [ ] `nginx/conf.d/quotes.conf` обновлен с реальным доменом
 - [ ] DNS A-записи настроены для домена и субдомена
 - [ ] Переменные DOMAIN и CERTBOT_EMAIL установлены
-- [ ] docker-compose.vps.yml без ошибок (`docker-compose config`)
+- [ ] docker-compose.vps.yml без ошибок (`docker compose config`)
 
 ### Команды проверки
 
@@ -496,7 +496,7 @@ cat .env.staging | grep -E "^(PORT|NODE_ENV|STORAGE_TYPE)"
 grep -E "server_name" nginx/conf.d/quotes.conf
 
 # Проверка Docker Compose
-docker-compose -f docker-compose.vps.yml config | grep -E "(image|env_file|ports)"
+docker compose -f docker-compose.vps.yml config | grep -E "(image|env_file|ports)"
 
 # Проверка DNS
 dig yourdomain.com +short
@@ -513,27 +513,27 @@ dig staging.yourdomain.com +short
 # 1. Создать конфигурационные файлы (см. выше)
 
 # 2. Собрать образы
-docker-compose -f docker-compose.vps.yml build
+docker compose -f docker-compose.vps.yml build
 
 # 3. Запустить контейнеры
-docker-compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml up -d
 
 # 4. Проверить статус
-docker-compose -f docker-compose.vps.yml ps
+docker compose -f docker-compose.vps.yml ps
 ```
 
 ### Обновление конфигурации
 
 ```bash
 # После изменения .env файлов:
-docker-compose -f docker-compose.vps.yml restart quote-production
-docker-compose -f docker-compose.vps.yml restart quote-staging
+docker compose -f docker-compose.vps.yml restart quote-production
+docker compose -f docker-compose.vps.yml restart quote-staging
 
 # После изменения Nginx конфига:
-docker-compose -f docker-compose.vps.yml exec nginx nginx -s reload
+docker compose -f docker-compose.vps.yml exec nginx nginx -s reload
 
 # Или полный перезапуск Nginx:
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 ```
 
 ---
@@ -546,11 +546,11 @@ docker-compose -f docker-compose.vps.yml restart nginx
 # Проверить что файл существует
 ls -la .env.production
 
-# Проверить что файл указан в docker-compose
+# Проверить что файл указан в docker compose
 grep "env_file" docker-compose.vps.yml
 
 # Пересоздать контейнер
-docker-compose -f docker-compose.vps.yml up -d --force-recreate quote-production
+docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 
 # Проверить переменные внутри контейнера
 docker exec quote-production env | grep NODE_ENV

@@ -79,7 +79,7 @@ source ~/.bashrc
 cd /opt/quote-calculator
 
 # Получить сертификат для обоих доменов
-docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
+docker compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 
 # Процесс займет 1-2 минуты
 ```
@@ -88,7 +88,7 @@ docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 
 ```bash
 # Перезапустить Nginx для применения сертификатов
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 
 # Проверка
 curl -I https://yourdomain.com
@@ -128,7 +128,7 @@ server {
 # Certbot-init service определен в docker-compose.vps.yml
 # Он запускается только при --profile init
 
-docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
+docker compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 ```
 
 **Что происходит:**
@@ -144,14 +144,14 @@ docker-compose -f docker-compose.vps.yml --profile init run --rm certbot-init
 
 ```bash
 # Проверить что сертификат создан
-docker-compose -f docker-compose.vps.yml exec nginx \
+docker compose -f docker-compose.vps.yml exec nginx \
   ls -la /etc/letsencrypt/live/
 
 # Должна быть директория с вашим доменом:
 # /etc/letsencrypt/live/yourdomain.com/
 
 # Проверить файлы сертификата
-docker-compose -f docker-compose.vps.yml exec nginx \
+docker compose -f docker-compose.vps.yml exec nginx \
   ls -la /etc/letsencrypt/live/yourdomain.com/
 
 # Должны быть:
@@ -190,10 +190,10 @@ certbot:
 
 ```bash
 # Просмотр логов Certbot
-docker-compose -f docker-compose.vps.yml logs certbot
+docker compose -f docker-compose.vps.yml logs certbot
 
 # Ручная проверка обновления (dry-run)
-docker-compose -f docker-compose.vps.yml exec certbot \
+docker compose -f docker-compose.vps.yml exec certbot \
   certbot renew --dry-run
 
 # Вывод должен быть:
@@ -204,11 +204,11 @@ docker-compose -f docker-compose.vps.yml exec certbot \
 
 ```bash
 # Если нужно обновить сертификат вручную
-docker-compose -f docker-compose.vps.yml exec certbot \
+docker compose -f docker-compose.vps.yml exec certbot \
   certbot renew --force-renewal
 
 # Перезапустить Nginx после обновления
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 ```
 
 ---
@@ -357,10 +357,10 @@ Cannot connect to the Docker daemon
 docker ps | grep nginx
 
 # Если остановлен - запустить
-docker-compose -f docker-compose.vps.yml up -d nginx
+docker compose -f docker-compose.vps.yml up -d nginx
 
 # Проверить логи
-docker-compose -f docker-compose.vps.yml logs nginx
+docker compose -f docker-compose.vps.yml logs nginx
 ```
 
 ### Проблема: Rate limit от Let's Encrypt
@@ -378,7 +378,7 @@ Let's Encrypt имеет лимиты:
 
 ```bash
 # Используйте staging сервер для тестирования
-docker-compose -f docker-compose.vps.yml exec certbot \
+docker compose -f docker-compose.vps.yml exec certbot \
   certbot certonly --webroot \
   --webroot-path=/var/www/certbot \
   --server https://acme-staging-v02.api.letsencrypt.org/directory \
@@ -400,7 +400,7 @@ Certificate will not be renewed
 docker ps | grep certbot
 
 # Если остановлен
-docker-compose -f docker-compose.vps.yml up -d certbot
+docker compose -f docker-compose.vps.yml up -d certbot
 
 # Принудительное обновление
 docker exec quote-certbot certbot renew --force-renewal
@@ -460,7 +460,7 @@ docker exec quote-certbot certbot certificates
 docker exec quote-certbot certbot renew
 
 # Перезагрузить Nginx
-docker-compose -f docker-compose.vps.yml restart nginx
+docker compose -f docker-compose.vps.yml restart nginx
 
 # Проверка
 curl -I https://yourdomain.com
