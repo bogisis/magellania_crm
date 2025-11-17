@@ -1,7 +1,7 @@
 # Node
 node_modules/
 npm-debug.log
-package-lock.json
+# package-lock.json - REMOVED: needed for Docker builds
 
 # OS
 .DS_Store
