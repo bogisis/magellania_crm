@@ -13,8 +13,8 @@
 # ============================================================================
 
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR=~/backups
-PROJECT_DIR=~/quote-calculator
+BACKUP_DIR=/opt/backups
+PROJECT_DIR=/opt/quote-calculator
 
 # Создать директорию для backup если не существует
 mkdir -p ${BACKUP_DIR}

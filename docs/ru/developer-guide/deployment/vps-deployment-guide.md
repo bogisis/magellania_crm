@@ -54,9 +54,14 @@ ssh deployer@69.62.104.218
 ## 📦 Шаг 2: Клонирование репозитория
 
 ```bash
-# Создать директорию для проекта
-mkdir -p ~/quote-calculator
-cd ~/quote-calculator
+# Создать директории для проекта и бэкапов
+sudo mkdir -p /opt/quote-calculator
+sudo mkdir -p /opt/backups
+sudo chown deployer:deployer /opt/quote-calculator
+sudo chown deployer:deployer /opt/backups
+
+# Перейти в директорию проекта
+cd /opt/quote-calculator
 
 # Клонировать репозиторий
 git clone https://github.com/bogisis/magellania_crm.git .
@@ -302,17 +307,17 @@ docker exec quote-nginx tail -f /var/log/nginx/quotes-production-error.log
 
 ```bash
 # Проверить скрипт бэкапа
-cat ~/quote-calculator/scripts/backup-vps.sh
+cat /opt/quote-calculator/scripts/backup-vps.sh
 
 # Сделать исполняемым (если еще не сделано)
-chmod +x ~/quote-calculator/scripts/backup-vps.sh
+chmod +x /opt/quote-calculator/scripts/backup-vps.sh
 
 # Протестировать бэкап вручную
-cd ~/quote-calculator
+cd /opt/quote-calculator
 ./scripts/backup-vps.sh
 
 # Проверить что бэкапы созданы
-ls -lh ~/backups/
+ls -lh /opt/backups/
 
 # Должны быть:
 # prod_YYYYMMDD_HHMMSS.db
@@ -322,7 +327,7 @@ ls -lh ~/backups/
 crontab -e
 
 # Добавить строку:
-0 3 * * * /home/deployer/quote-calculator/scripts/backup-vps.sh >> /home/deployer/quote-calculator/backup.log 2>&1
+0 3 * * * /opt/quote-calculator/scripts/backup-vps.sh >> /opt/quote-calculator/backup.log 2>&1
 
 # Сохранить и выйти (Ctrl+X, Y, Enter)
 
@@ -334,13 +339,13 @@ crontab -l
 
 ```bash
 # Просмотр лога бэкапов (после первого запуска)
-tail -f ~/quote-calculator/backup.log
+tail -f /opt/quote-calculator/backup.log
 
 # Список всех бэкапов
-ls -lh ~/backups/ | sort
+ls -lh /opt/backups/ | sort
 
 # Тест восстановления из бэкапа (не удаляет текущую БД)
-sqlite3 /tmp/test.db ".restore ~/backups/prod_20250117_030001.db"
+sqlite3 /tmp/test.db ".restore /opt/backups/prod_20250117_030001.db"
 sqlite3 /tmp/test.db ".tables"
 ```
 
@@ -355,7 +360,7 @@ sqlite3 /tmp/test.db ".tables"
 ssh deployer@69.62.104.218
 
 # Перейти в директорию проекта
-cd ~/quote-calculator
+cd /opt/quote-calculator
 
 # Создать бэкап перед обновлением (ОБЯЗАТЕЛЬНО!)
 ./scripts/backup-vps.sh
@@ -508,7 +513,7 @@ docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 ### Проблема 4: Бэкапы не создаются
 
 **Симптомы:**
-- Папка `~/backups` пустая
+- Папка `/opt/backups` пустая
 - Cron не выполняется
 
 **Решение:**
@@ -517,7 +522,7 @@ docker compose -f docker-compose.vps.yml up -d --force-recreate quote-production
 crontab -l
 
 # Запустить скрипт вручную для отладки
-cd ~/quote-calculator
+cd /opt/quote-calculator
 ./scripts/backup-vps.sh
 
 # Проверить права
@@ -530,7 +535,7 @@ chmod +x scripts/backup-vps.sh
 docker ps | grep quote-
 
 # Проверить лог бэкапов
-cat ~/quote-calculator/backup.log
+cat /opt/quote-calculator/backup.log
 ```
 
 ---
@@ -617,7 +622,7 @@ sudo ufw status verbose
 4. **Backup verification**
 ```bash
 # Раз в месяц проверять что бэкапы можно восстановить
-sqlite3 /tmp/restore-test.db ".restore ~/backups/prod_latest.db"
+sqlite3 /tmp/restore-test.db ".restore /opt/backups/prod_latest.db"
 sqlite3 /tmp/restore-test.db "SELECT COUNT(*) FROM estimates;"
 ```
 

@@ -25,8 +25,9 @@ ssh deployer@69.62.104.218
 ### 2. Клонирование репозитория
 
 ```bash
-mkdir -p ~/quote-calculator
-cd ~/quote-calculator
+sudo mkdir -p /opt/quote-calculator
+sudo chown deployer:deployer /opt/quote-calculator
+cd /opt/quote-calculator
 git clone https://github.com/bogisis/magellania_crm.git .
 ```
 
@@ -107,17 +108,21 @@ curl https://staging.magellania.net/health
 ### 8. Настройка автоматических бэкапов
 
 ```bash
+# Создать директорию для бэкапов
+sudo mkdir -p /opt/backups
+sudo chown deployer:deployer /opt/backups
+
 # Протестировать бэкап
 ./scripts/backup-vps.sh
 
 # Проверить что бэкапы созданы
-ls -lh ~/backups/
+ls -lh /opt/backups/
 
 # Настроить cron (3:00 AM каждый день)
 crontab -e
 
 # Добавить строку:
-0 3 * * * /home/deployer/quote-calculator/scripts/backup-vps.sh >> /home/deployer/quote-calculator/backup.log 2>&1
+0 3 * * * /opt/quote-calculator/scripts/backup-vps.sh >> /opt/quote-calculator/backup.log 2>&1
 
 # Проверить
 crontab -l
@@ -168,14 +173,14 @@ docker compose -f docker-compose.vps.yml up -d
 
 ```bash
 # Ручной бэкап
-cd ~/quote-calculator
+cd /opt/quote-calculator
 ./scripts/backup-vps.sh
 
 # Список бэкапов
-ls -lh ~/backups/
+ls -lh /opt/backups/
 
 # Лог бэкапов
-tail -f ~/quote-calculator/backup.log
+tail -f /opt/quote-calculator/backup.log
 ```
 
 ---
