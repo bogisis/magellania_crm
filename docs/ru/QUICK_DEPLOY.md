@@ -14,7 +14,7 @@
 
 ---
 
-## 🎯 Быстрый старт (10 минут)
+## 🎯 Быстрый старт (15 минут)
 
 ### 1. Подключение к VPS
 
@@ -22,7 +22,24 @@
 ssh deployer@69.62.104.218
 ```
 
-### 2. Клонирование репозитория
+### 2. Установка Node.js 18+ (если не установлен)
+
+```bash
+# Проверить текущую версию
+node --version
+
+# Если версия < 18, установить nvm и Node.js 18
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+nvm install 18
+nvm use 18
+nvm alias default 18
+
+# Проверить
+node --version  # Должно быть v18.x.x
+```
+
+### 3. Клонирование репозитория
 
 ```bash
 sudo mkdir -p /opt/quote-calculator
@@ -42,7 +59,17 @@ cat ~/.ssh/id_ed25519.pub
 # Добавить в GitHub: Settings → SSH and GPG keys → New SSH key
 ```
 
-### 3. Проверка конфигурации
+### 4. Установка зависимостей
+
+```bash
+# Установить npm зависимости
+npm install
+
+# Сделать скрипт бэкапа исполняемым
+chmod +x scripts/backup-vps.sh
+```
+
+### 5. Проверка конфигурации
 
 ```bash
 # Проверить .env
@@ -51,23 +78,27 @@ cat .env
 # DOMAIN=crm.magellania.net
 # STAGING_DOMAIN=staging.magellania.net
 # CERTBOT_EMAIL=admin@magellania.net
-
-# Сделать скрипт бэкапа исполняемым
-chmod +x scripts/backup-vps.sh
 ```
 
-### 4. Запуск Nginx (для Let's Encrypt)
+### 6. Запуск всех контейнеров
 
 ```bash
-# Запустить Nginx
-docker compose -f docker-compose.vps.yml up -d nginx
+# Запустить все сервисы (nginx будет работать только на HTTP)
+docker compose -f docker-compose.vps.yml up -d
 
-# Проверить
-docker ps | grep nginx
-curl -I http://crm.magellania.net
+# Проверить что контейнеры запущены
+docker ps
+# Должно быть:
+# - quote-production (healthy)
+# - quote-staging (healthy)
+# - quote-nginx (running)
+
+# Проверить что приложения доступны
+curl http://crm.magellania.net/health
+curl http://staging.magellania.net/health
 ```
 
-### 5. Получение SSL сертификатов
+### 7. Получение SSL сертификатов
 
 ```bash
 # Получить сертификаты для обоих доменов
@@ -78,34 +109,36 @@ docker compose -f docker-compose.vps.yml run --rm certbot-init
 # Successfully received certificate for staging.magellania.net
 ```
 
-### 6. Запуск полного стека
+### 8. Включение HTTPS
 
 ```bash
-# Перезапустить Nginx с SSL
+# Раскомментировать HTTPS блок в nginx.conf
+# Редактировать файл nginx/nginx.conf (строки 113-136)
+# Или выполнить git pull если изменения уже в репозитории
+
+# Перезапустить nginx для применения SSL
 docker compose -f docker-compose.vps.yml restart nginx
 
-# Запустить все контейнеры
-docker compose -f docker-compose.vps.yml up -d
-
-# Проверить
-docker ps
+# Проверить HTTPS
+curl https://crm.magellania.net/health
+curl https://staging.magellania.net/health
 ```
 
-### 7. Проверка работоспособности
+### 9. Проверка работоспособности
 
 ```bash
 # Health checks
 curl https://crm.magellania.net/health
 curl https://staging.magellania.net/health
 
-# Ожидается: {"status":"ok","timestamp":"..."}
+# Ожидается: {"status":"healthy","version":"2.3.0",...}
 ```
 
 **Открыть в браузере:**
 - Production: https://crm.magellania.net
 - Staging: https://staging.magellania.net
 
-### 8. Настройка автоматических бэкапов
+### 10. Настройка автоматических бэкапов
 
 ```bash
 # Создать директорию для бэкапов
@@ -187,7 +220,108 @@ tail -f /opt/quote-calculator/backup.log
 
 ## 🆘 Troubleshooting
 
-### SSL сертификаты не получены
+### Проблема: package-lock.json not found при Docker build
+
+**Симптомы:**
+```
+ERROR: "/package-lock.json": not found
+```
+
+**Причина:** Файл `package-lock.json` был в `.gitignore`
+
+**Решение:**
+```bash
+# На локальной машине
+git pull origin main  # package-lock.json уже добавлен в репозиторий
+
+# На VPS если файла всё ещё нет
+npm install  # Создаст package-lock.json
+git add package-lock.json
+git commit -m "Add package-lock.json"
+git push
+```
+
+### Проблема: Node.js версия < 18
+
+**Симптомы:**
+```
+npm WARN engine quote-calculator@2.3.0: wanted: {"node":">=18.0.0"} (current: {"node":"v12.22.9"})
+```
+
+**Решение:**
+```bash
+# Установить nvm и Node.js 18
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+nvm install 18
+nvm use 18
+nvm alias default 18
+node --version  # Должно показать v18.x.x
+```
+
+### Проблема: Nginx ошибка "host not found in upstream"
+
+**Симптомы:**
+```
+nginx: [emerg] host not found in upstream "quote-prod:4000"
+```
+
+**Причина:** Неправильное имя контейнера в nginx.conf
+
+**Решение:**
+```bash
+# Проверить имена контейнеров
+docker ps
+
+# Должны быть: quote-production и quote-staging (не quote-prod)
+# Исправление уже в репозитории
+git pull origin main
+docker compose -f docker-compose.vps.yml restart nginx
+```
+
+### Проблема: SSL сертификаты - 403 Forbidden
+
+**Симптомы:**
+```
+Certbot failed to authenticate some domains
+Detail: Invalid response from http://crm.magellania.net/.well-known/acme-challenge/: 403
+```
+
+**Причина:** Nginx блокировал доступ к `.well-known/acme-challenge/`
+
+**Решение:**
+```bash
+# Исправление уже в репозитории (common-config.conf)
+git pull origin main
+docker compose -f docker-compose.vps.yml restart nginx
+
+# Повторить попытку получения сертификатов
+docker compose -f docker-compose.vps.yml run --rm certbot-init
+```
+
+### Проблема: SSL сертификаты - cannot load certificate
+
+**Симптомы:**
+```
+nginx: [emerg] cannot load certificate "/etc/nginx/ssl/cert.pem": no such file
+```
+
+**Причина:** HTTPS блок в nginx.conf пытается загрузить несуществующие сертификаты
+
+**Решение:**
+```bash
+# HTTPS блок должен быть закомментирован до получения сертификатов
+# После получения сертификатов раскомментировать блок
+
+# Проверить что HTTPS блок закомментирован
+grep -A 5 "HTTPS Server" nginx/nginx.conf
+
+# Если не закомментирован - исправление в репозитории
+git pull origin main
+docker compose -f docker-compose.vps.yml restart nginx
+```
+
+### SSL сертификаты не получены (общие проблемы)
 
 ```bash
 # Проверить DNS
@@ -245,7 +379,22 @@ docker compose -f docker-compose.vps.yml up -d --force-recreate
 
 ---
 
+## 📝 История изменений
+
+### 17 ноября 2025 - Успешное развертывание
+- ✅ Исправлены проблемы с развертыванием
+- ✅ Коммиты с исправлениями:
+  - `511e56c` - Добавлен package-lock.json для Docker builds
+  - `a254fcf` - Исправлено имя upstream: quote-prod → quote-production
+  - `e93c868` - HTTPS блок временно отключен до получения SSL
+  - `837aec4` - Исправлен доступ к Let's Encrypt ACME challenge
+- ✅ SSL сертификаты успешно получены
+- ✅ Приложения развернуты и работают
+
+---
+
 **Дата создания:** 17 января 2025
+**Последнее обновление:** 17 ноября 2025
 **VPS IP:** 69.62.104.218
 **Production:** crm.magellania.net
 **Staging:** staging.magellania.net
