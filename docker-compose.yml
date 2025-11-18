@@ -61,7 +61,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: staging
+      target: prod
       args:
         NODE_VERSION: 18
     image: quote-calculator:staging

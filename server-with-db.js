@@ -3,10 +3,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const passport = require('passport');
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
 
 // Storage adapters
 const SQLiteStorage = require('./storage/SQLiteStorage');
 const FileStorage = require('./storage/FileStorage'); // Only for import/export
+
+// Authentication
+const AuthService = require('./services/AuthService');
+const configurePassport = require('./config/passport');
+const authRoutes = require('./routes/auth');
+const { requireAuth } = require('./middleware/auth');
 
 // DAY 1.3: Disk space validation middleware (Production Safety)
 const { checkDiskSpace, getDiskSpaceInfo } = require('./middleware/diskSpace');
@@ -39,14 +48,44 @@ logger.info('Storage configuration', {
 // Middleware
 // ============================================================================
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || true,
+    credentials: true  // Allow cookies
+}));
 app.use(express.json({ limit: process.env.JSON_LIMIT || '50mb' }));
-app.use(express.static('.'));
+app.use(express.urlencoded({ extended: true }));  // For form data
 
 // DAY 2.1: HTTP request logging
 if (!isTestMode) {
     app.use(logger.middleware());
 }
+
+// Session configuration (must be before passport)
+const sessionStore = new SQLiteStore({
+    db: process.env.SESSION_DB_PATH || 'sessions.db',
+    dir: './db',
+    table: 'sessions'
+});
+
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production-IMPORTANT',
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore,
+    cookie: {
+        secure: process.env.SESSION_SECURE_COOKIE === 'true',  // true only for HTTPS
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 days
+        sameSite: 'lax'
+    }
+}));
+
+// Initialize Passport (must be after session)
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Serve static files (login.html, etc.)
+app.use(express.static('.'));
 
 // ============================================================================
 // Storage Initialization
@@ -63,11 +102,35 @@ async function initStorage() {
             version: '2.3.0',
             environment: process.env.NODE_ENV || 'development'
         });
+
+        // Initialize AuthService
+        const authService = new AuthService(storage.db);
+        app.locals.authService = authService;
+        app.locals.db = storage.db;
+
+        // Configure Passport
+        configurePassport(authService);
+
+        logger.info('Authentication configured', {
+            sessionStore: 'sqlite',
+            cookieSecure: process.env.SESSION_SECURE_COOKIE === 'true'
+        });
     } catch (err) {
         logger.logError(err, { context: 'Storage initialization' });
         throw err;
     }
 }
+
+// ============================================================================
+// Authentication API
+// ============================================================================
+
+app.use('/api/auth', authRoutes);
+
+// Login page
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'login.html'));
+});
 
 // ============================================================================
 // API для каталога
