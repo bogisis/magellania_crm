@@ -8,9 +8,10 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolygon points='16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76'/%3E%3C/svg%3E">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Quill.js Rich Text Editor -->
+    <!-- Quill.js Rich Text Editor - ОТКЛЮЧЕНО из-за ORB блокировки
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    -->
     <style>
         :root {
             --primary: #1e40af;
@@ -3410,8 +3411,7 @@
             init() {
                 this.initRegions(); // Инициализация регионов (должна быть первой!)
                 // loadCategories() не нужен - loadCatalogForRegion() уже загружает категории
-                this.renderCategories();
-                this.renderCategoryOptions();
+                // renderCategories() и renderCategoryOptions() вызываются в loadCatalogForRegion() после загрузки данных
                 this.loadExternalCatalog();
                 this.bindEvents();
                 this.initQuillEditors(); // Инициализация WYSIWYG редакторов
@@ -4728,6 +4728,12 @@
 
             initQuillEditors() {
                 console.log('[Quill] Инициализация редакторов...');
+
+                // Проверяем, загружена ли библиотека Quill
+                if (typeof Quill === 'undefined') {
+                    console.warn('[Quill] Библиотека Quill не загружена, используем fallback на textarea');
+                    return; // Graceful degradation - используем обычные textarea
+                }
 
                 // Конфигурация тулбара
                 const toolbarOptions = [
@@ -7467,82 +7473,122 @@
                 this.showNotification(`Регион "${regionName}" удалён`);
             }
 
-            changeRegion(newRegion) {
+            async changeRegion(newRegion) {
                 if (newRegion === this.currentRegion) return;
 
-                // Сохраняем текущий каталог перед переключением
-                this.saveCatalogToRegion(this.currentRegion);
+                try {
+                    // Сохраняем текущий каталог перед переключением
+                    await this.saveCatalogToRegion(this.currentRegion);
 
-                // Переключаемся на новый регион
-                this.currentRegion = newRegion;
-                localStorage.setItem('quoteCalc_currentRegion', newRegion);
+                    // Переключаемся на новый регион
+                    this.currentRegion = newRegion;
+                    localStorage.setItem('quoteCalc_currentRegion', newRegion);
 
-                // Загружаем каталог нового региона
-                this.loadCatalogForRegion(newRegion);
+                    // Загружаем каталог нового региона
+                    await this.loadCatalogForRegion(newRegion);
 
-                this.showNotification(`Переключено на регион: ${newRegion}`);
+                    this.showNotification(`Переключено на регион: ${newRegion}`);
+                } catch (error) {
+                    console.error('Ошибка переключения региона:', error);
+                    this.showNotification(`Ошибка переключения региона: ${error.message}`, true);
+                }
             }
 
-            saveCatalogToRegion(regionName) {
-                const key = `quoteCalc_templates_${regionName}`;
-                localStorage.setItem(key, JSON.stringify(this.templates));
+            async saveCatalogToRegion(regionName) {
+                try {
+                    // Формируем имя файла каталога
+                    const catalogName = regionName ? `catalog_${regionName}.json` : 'catalog.json';
 
-                // Сохраняем категории региона
-                const catKey = `quoteCalc_categories_${regionName}`;
-                localStorage.setItem(catKey, JSON.stringify(this.categories));
+                    // Формируем данные каталога
+                    const catalogData = {
+                        version: this.CATALOG_VERSION || '1.2.0',
+                        region: regionName,
+                        timestamp: Date.now(),
+                        templates: this.templates,
+                        categories: this.categories
+                    };
 
-                console.log(`Каталог региона "${regionName}" сохранён`);
-            }
+                    // Отправляем на сервер
+                    const response = await fetch('/api/catalogs', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            name: catalogName,
+                            data: catalogData,
+                            visibility: 'organization'
+                        })
+                    });
 
-            loadCatalogForRegion(regionName) {
-                // Загружаем каталог региона
-                const key = `quoteCalc_templates_${regionName}`;
-                const savedCatalog = localStorage.getItem(key);
+                    const result = await response.json();
 
-                if (savedCatalog) {
-                    const templates = JSON.parse(savedCatalog);
-                    // Убеждаемся что у всех шаблонов есть поле region
-                    this.templates = templates.map(t => ({
-                        ...t,
-                        region: t.region || regionName
-                    }));
-
-                    // Сохраняем обратно если были обновления
-                    const needsUpdate = templates.some(t => !t.region);
-                    if (needsUpdate) {
-                        localStorage.setItem(key, JSON.stringify(this.templates));
-                        console.log(`Миграция: добавлены регионы к шаблонам в "${regionName}"`);
+                    if (!result.success) {
+                        throw new Error(result.error || 'Failed to save catalog');
                     }
-                } else {
-                    // Новый регион - пустой каталог
-                    this.templates = [];
+
+                    console.log(`Каталог региона "${regionName}" сохранён на сервер`);
+                } catch (error) {
+                    console.error('Ошибка сохранения каталога:', error);
+                    this.showNotification(`Ошибка сохранения каталога: ${error.message}`, true);
+                    throw error;
                 }
+            }
 
-                // Загружаем категории региона
-                const catKey = `quoteCalc_categories_${regionName}`;
-                const savedCategories = localStorage.getItem(catKey);
+            async loadCatalogForRegion(regionName) {
+                try {
+                    // Формируем имя файла каталога
+                    const catalogName = regionName ? `catalog_${regionName}.json` : 'catalog.json';
 
-                if (savedCategories) {
-                    this.categories = JSON.parse(savedCategories);
-                } else {
-                    // Используем категории по умолчанию
-                    this.categories = [
-                        { id: 'undefined', name: 'Не определено', icon: '❓', system: true },
-                        { id: 'transfer', name: 'Трансфер', icon: '🚗' },
-                        { id: 'accommodation', name: 'Отели', icon: '🏨' },
-                        { id: 'guide', name: 'Гиды', icon: '👨‍🏫' },
-                        { id: 'activity', name: 'Активности', icon: '🏛️' },
-                        { id: 'service', name: 'Сервис', icon: '🔧' }
-                    ];
-                    this.saveCategories();
-                }
+                    // Загружаем с сервера
+                    const response = await fetch(`/api/catalogs/${catalogName}`, {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
 
-                // ВАЖНО: Убеждаемся что системная категория "Не определено" ВСЕГДА существует
-                // Она должна быть в настройках, но в UI показывается только если есть услуги
-                const hasUndefinedCategory = this.categories.some(cat => cat.id === 'undefined');
-                if (!hasUndefinedCategory) {
-                    console.log(`Добавляем системную категорию "Не определено" в регион "${regionName}"`);
-                    this.categories.unshift({
+                    if (response.status === 404) {
+                        // Каталог не найден - создаем пустой
+                        console.log(`Каталог "${catalogName}" не найден, создаем пустой`);
+                        this.templates = [];
+                        this.categories = this.getDefaultCategories();
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (!result.success || !result.data) {
+                        throw new Error(result.error || 'Invalid catalog data');
+                    }
+
+                    const catalogData = result.data;
+
+                    // Загружаем templates
+                    if (catalogData.templates && Array.isArray(catalogData.templates)) {
+                        this.templates = catalogData.templates.map(t => ({
+                            ...t,
+                            region: t.region || regionName
+                        }));
+                    } else {
+                        this.templates = [];
+                    }
+
+                    // Загружаем categories
+                    if (catalogData.categories && Array.isArray(catalogData.categories)) {
+                        this.categories = catalogData.categories;
+                    } else {
+                        this.categories = this.getDefaultCategories();
+                    }
+
+                    // ВАЖНО: Убеждаемся что системная категория "Не определено" ВСЕГДА существует
+                    const hasUndefinedCategory = this.categories.some(cat => cat.id === 'undefined');
+                    if (!hasUndefinedCategory) {
+                        console.log(`Добавляем системную категорию "Не определено" в регион "${regionName}"`);
+                        this.categories.unshift({
                         id: 'undefined',
                         name: 'Не определено',
                         icon: '❓',
@@ -7592,7 +7638,26 @@
                 this.renderCategoryOptions();
                 this.renderRegionsManager();
 
-                console.log(`Загружен каталог региона "${regionName}": ${this.templates.length} услуг`);
+                console.log(`Загружен каталог региона "${regionName}" с сервера: ${this.templates.length} услуг`);
+                } catch (error) {
+                    console.error('Ошибка загрузки каталога:', error);
+                    this.showNotification(`Ошибка загрузки каталога: ${error.message}`, true);
+
+                    // Fallback: используем пустой каталог
+                    this.templates = [];
+                    this.categories = this.getDefaultCategories();
+                }
+            }
+
+            getDefaultCategories() {
+                return [
+                    { id: 'undefined', name: 'Не определено', icon: '❓', system: true },
+                    { id: 'transfer', name: 'Трансфер', icon: '🚗' },
+                    { id: 'accommodation', name: 'Отели', icon: '🏨' },
+                    { id: 'guide', name: 'Гиды', icon: '👨‍🏫' },
+                    { id: 'activity', name: 'Активности', icon: '🏛️' },
+                    { id: 'service', name: 'Сервис', icon: '🔧' }
+                ];
             }
 
             escapeHtml(text) {
@@ -11289,20 +11354,22 @@
 
     <!-- Server Integration Script -->
     <script>
-        // Создаем apiClient ПОСЛЕ загрузки apiClient.js
-        window.apiClient = new APIClient();
-        const apiClient = window.apiClient;
+        // Ждём загрузки всех внешних ресурсов (включая Quill из CDN)
+        window.addEventListener('load', function() {
+            // Создаем apiClient ПОСЛЕ загрузки apiClient.js
+            window.apiClient = new APIClient();
+            const apiClient = window.apiClient;
 
-        // ВАЖНО: Создаём QuoteCalc ПОСЛЕ apiClient
-        const QuoteCalc = new ProfessionalQuoteCalculator();
-        window.QuoteCalc = QuoteCalc;
+            // ВАЖНО: Создаём QuoteCalc ПОСЛЕ apiClient
+            const QuoteCalc = new ProfessionalQuoteCalculator();
+            window.QuoteCalc = QuoteCalc;
 
-        // ===== ErrorBoundary Integration =====
-        // Создаём ErrorBoundary для централизованной обработки ошибок
-        const errorBoundary = new ErrorBoundary(QuoteCalc);
-        window.errorBoundary = errorBoundary;
+            // ===== ErrorBoundary Integration =====
+            // Создаём ErrorBoundary для централизованной обработки ошибок
+            const errorBoundary = new ErrorBoundary(QuoteCalc);
+            window.errorBoundary = errorBoundary;
 
-        console.log('[Init] ErrorBoundary initialized successfully');
+            console.log('[Init] ErrorBoundary initialized successfully');
 
         // УДАЛЕНО: loadAutosaveFromServer() больше не нужна
         // Теперь автосохранение сохраняет напрямую в текущий файл сметы
@@ -11856,10 +11923,11 @@
                                 <div style="font-size: 12px; color: var(--gray-600);">
                                     PAX: ${est.paxCount || 0} | ${new Date(est.updatedAt).toLocaleString('ru-RU')}
                                 </div>
+                                <div style="font-size: 10px; color: var(--gray-400); margin-top: 2px;">${est.filename}</div>
                             </div>
                             <div style="display: flex; gap: 8px;">
-                                <button onclick="loadEstimate('${est.filename}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Открыть</button>
-                                <button onclick="deleteEstimate('${est.filename}')" style="padding: 6px 12px; background: var(--warning); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Удалить</button>
+                                <button onclick="loadEstimate('${est.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Открыть</button>
+                                <button onclick="deleteEstimate('${est.id}')" style="padding: 6px 12px; background: var(--warning); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Удалить</button>
                             </div>
                         </div>
                     `).join('');
@@ -11872,19 +11940,19 @@
             }
         };
 
-        // Загрузить смету из списка
-        window.loadEstimate = async function(filename) {
+        // Загрузить смету из списка (ID-First Pattern)
+        window.loadEstimate = async function(id) {
             document.getElementById('estimates-modal').style.display = 'none';
-            await window.QuoteCalc.loadQuoteFromServer(filename);
+            await window.QuoteCalc.loadQuoteFromServer(id);
         };
 
-        // Удалить смету
-        window.deleteEstimate = async function(filename) {
-            if (!confirm('Удалить смету "' + filename + '"?')) {
+        // Удалить смету (ID-First Pattern)
+        window.deleteEstimate = async function(id) {
+            if (!confirm('Удалить эту смету?')) {
                 return;
             }
             try {
-                await apiClient.deleteEstimate(filename);
+                await apiClient.deleteEstimate(id);
                 window.QuoteCalc.showNotification('Смета удалена', false);
                 window.showEstimatesList(); // Обновить список
             } catch (err) {
@@ -12026,8 +12094,8 @@
         })();
 
         // Инициализация серверной интеграции
-        document.addEventListener('DOMContentLoaded', function() {
-            // Обработчики модального окна
+        // ВАЖНО: Код уже внутри window.addEventListener('load'), поэтому DOM точно загружен
+        // Обработчики модального окна
             const closeBtn = document.getElementById('close-estimates-modal');
             const modal = document.getElementById('estimates-modal');
 
@@ -12090,8 +12158,10 @@
                 });
             }
 
-            // Серверная интеграция успешно активирована
-        });
+        // Серверная интеграция успешно активирована
+        // Глобальные функции определены и доступны
+        console.log('[Init] All systems initialized');
+        }); // конец window.addEventListener('load')
     </script>
 </body>
 </html>

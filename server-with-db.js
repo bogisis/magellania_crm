@@ -15,6 +15,7 @@ const FileStorage = require('./storage/FileStorage'); // Only for import/export
 const AuthService = require('./services/AuthService');
 const configurePassport = require('./config/passport');
 const authRoutes = require('./routes/auth');
+const catalogRoutes = require('./routes/catalogs');
 const { requireAuth } = require('./middleware/auth');
 
 // DAY 1.3: Disk space validation middleware (Production Safety)
@@ -107,6 +108,7 @@ async function initStorage() {
         const authService = new AuthService(storage.db);
         app.locals.authService = authService;
         app.locals.db = storage.db;
+        app.locals.storage = storage;  // Make storage available to routes
 
         // Configure Passport
         configurePassport(authService);
@@ -133,35 +135,10 @@ app.get('/login', (req, res) => {
 });
 
 // ============================================================================
-// API для каталога
+// Catalog API (Multi-Tenant)
 // ============================================================================
 
-app.get('/api/catalog/list', async (req, res) => {
-    try {
-        const files = await storage.getCatalogsList();
-        res.json({ success: true, files });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-app.get('/api/catalog/:filename', async (req, res) => {
-    try {
-        const data = await storage.loadCatalog(req.params.filename);
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-app.post('/api/catalog/:filename', checkDiskSpace, async (req, res) => {
-    try {
-        await storage.saveCatalog(req.params.filename, req.body);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+app.use('/api/catalogs', catalogRoutes);
 
 // ============================================================================
 // API для смет
@@ -169,9 +146,19 @@ app.post('/api/catalog/:filename', checkDiskSpace, async (req, res) => {
 
 app.get('/api/estimates', async (req, res) => {
     try {
-        const estimates = await storage.getEstimatesList();
+        // Multi-tenancy: фильтруем по organization_id пользователя
+        const organizationId = req.user?.organization_id || 'default-org';
+        const estimates = await storage.getEstimatesList(organizationId);
+
+        logger.info('Estimates list retrieved', {
+            userId: req.user?.id || 'anonymous',
+            organizationId,
+            count: estimates.length
+        });
+
         res.json({ success: true, estimates });
     } catch (err) {
+        logger.error('Error getting estimates list', { error: err.message });
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -327,7 +314,16 @@ app.post('/api/estimates/batch', checkDiskSpace, async (req, res) => {
 // ID-First: Load estimate by ID
 app.get('/api/estimates/:id', async (req, res) => {
     try {
-        const data = await storage.loadEstimate(req.params.id);
+        // Multi-tenancy: используем organization_id пользователя
+        const organizationId = req.user?.organization_id || 'default-org';
+        const data = await storage.loadEstimate(req.params.id, organizationId);
+
+        logger.info('Estimate loaded', {
+            userId: req.user?.id || 'anonymous',
+            organizationId,
+            estimateId: req.params.id
+        });
+
         res.json({ success: true, data });
     } catch (err) {
         logger.logError(err, { context: `Load estimate ${req.params.id}` });
@@ -360,7 +356,16 @@ app.post('/api/estimates/:id', checkDiskSpace, async (req, res) => {
 // ID-First: Delete estimate by ID
 app.delete('/api/estimates/:id', checkDiskSpace, async (req, res) => {
     try {
-        await storage.deleteEstimate(req.params.id);
+        // Multi-tenancy: используем organization_id пользователя
+        const organizationId = req.user?.organization_id || 'default-org';
+        await storage.deleteEstimate(req.params.id, organizationId);
+
+        logger.info('Estimate deleted', {
+            userId: req.user?.id || 'anonymous',
+            organizationId,
+            estimateId: req.params.id
+        });
+
         res.json({ success: true });
     } catch (err) {
         logger.logError(err, { context: `Delete estimate ${req.params.id}` });
