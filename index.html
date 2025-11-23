@@ -2601,7 +2601,24 @@
 
                         <!-- ПРАВАЯ КОЛОНКА -->
                         <div>
-                            <!-- Зарезервировано -->
+                            <!-- Управление всеми данными -->
+                            <div style="background: white; border-radius: var(--radius); padding: calc(var(--spacing) * 2); border: 1px solid var(--gray-200);">
+                                <div class="text-sm font-medium" style="margin-bottom: calc(var(--spacing) * 2); color: var(--gray-700);">Управление всеми данными</div>
+
+                                <input type="file" id="import-all-file-input" accept=".json" style="display: none;" onchange="window.QuoteCalc.importAllDataFromFile(event)">
+
+                                <div style="display: flex; flex-direction: column; gap: calc(var(--spacing) * 1);">
+                                    <button class="btn btn-sm" onclick="document.getElementById('import-all-file-input').click()" style="white-space: nowrap;" title="Импортировать все данные из JSON файла">
+                                        <i data-lucide="upload" style="width: 14px; height: 14px;"></i> Импортировать все (JSON)
+                                    </button>
+                                    <button class="btn btn-sm" onclick="window.QuoteCalc.exportAllData()" style="white-space: nowrap;" title="Экспортировать все данные в JSON файл">
+                                        <i data-lucide="download" style="width: 14px; height: 14px;"></i> Экспортировать все (JSON)
+                                    </button>
+                                    <button class="btn btn-sm" onclick="window.QuoteCalc.exportDatabase()" style="white-space: nowrap;" title="Экспортировать базу данных (SQLite)">
+                                        <i data-lucide="hard-drive" style="width: 14px; height: 14px;"></i> Экспортировать БД (SQLite)
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                     </div>
@@ -8695,6 +8712,201 @@
             }
 
             // ===== NEW JSON FUNCTIONS =====
+
+            // All-in-one import/export functions
+            async importAllDataFromFile(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (file.size > this.config.maxFileSize) {
+                    this.showNotification(`Файл слишком большой (${(file.size/1024/1024).toFixed(1)}MB). Максимум 5MB`, true);
+                    event.target.value = '';
+                    return;
+                }
+
+                if (!confirm('Импортировать все данные? Это перезапишет существующие сметы, каталоги и настройки. Продолжить?')) {
+                    event.target.value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const importData = JSON.parse(e.target.result);
+                        const response = await window.apiClient.importAllData(importData);
+
+                        if (response.success) {
+                            this.showNotification('Все данные успешно импортированы!', false);
+                            // After importing all data, we need to completely refresh the UI
+                            // This means reloading current quote, current catalog, and settings
+                            await this.loadGlobalSettings(); // Reload settings
+                            await this.loadCatalogForRegion(this.currentRegion); // Reload current region catalog
+                            // Reload current quote if any
+                            if (this.state.currentQuoteFile) {
+                                await this.loadQuoteFromServer(this.state.currentQuoteFile);
+                            } else {
+                                this.reset(); // If no quote was open, start fresh
+                            }
+                        } else {
+                            this.showNotification(`Ошибка импорта всех данных: ${response.error}`, true);
+                        }
+                    } catch (error) {
+                        this.showNotification('Ошибка чтения или импорта файла: ' + error.message, true);
+                        console.error('Import All Data Error:', error);
+                    } finally {
+                        event.target.value = ''; // Reset file input
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+
+            async exportAllData() {
+                if (!confirm('Экспортировать все данные? Будет создан JSON файл со всеми сметами, каталогами и настройками.')) {
+                    return;
+                }
+
+                try {
+                    const response = await window.apiClient.exportAllData(); // This API returns the JSON data
+                    if (response) {
+                        const jsonString = JSON.stringify(response, null, 2);
+                        const filename = `magellania_full_export_${new Date().toISOString().split('T')[0]}.json`;
+                        this.downloadJSON(jsonString, filename);
+                        this.showNotification('Все данные успешно экспортированы!');
+                    } else {
+                        this.showNotification('Ошибка экспорта всех данных: Не получен ответ от сервера.', true);
+                    }
+                } catch (error) {
+                    this.showNotification('Ошибка экспорта всех данных: ' + error.message, true);
+                    console.error('Export All Data Error:', error);
+                }
+            }
+
+            async exportDatabase() {
+                if (!confirm('Экспортировать базу данных (SQLite)? Будет скачан файл quotes.db. Продолжить?')) {
+                    return;
+                }
+
+                try {
+                    // Assuming apiClient.exportDatabase() directly triggers a download or returns a Blob
+                    // If it returns a Blob:
+                    const response = await window.apiClient.exportDatabase();
+                    if (response instanceof Blob) {
+                        const filename = `magellania_quotes_db_backup_${new Date().toISOString().split('T')[0]}.db`;
+                        const url = window.URL.createObjectURL(response);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        this.showNotification('База данных успешно экспортирована!');
+                    } else {
+                        // If apiClient already triggers download, just show notification
+                        this.showNotification('База данных успешно экспортирована!', false);
+                    }
+                } catch (error) {
+                    this.showNotification('Ошибка экспорта базы данных: ' + error.message, true);
+                    console.error('Export Database Error:', error);
+                }
+            }
+            // All-in-one import/export functions
+            async importAllDataFromFile(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (file.size > this.config.maxFileSize) {
+                    this.showNotification(`Файл слишком большой (${(file.size/1024/1024).toFixed(1)}MB). Максимум 5MB`, true);
+                    event.target.value = '';
+                    return;
+                }
+
+                if (!confirm('Импортировать все данные? Это перезапишет существующие сметы, каталоги и настройки. Продолжить?')) {
+                    event.target.value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const importData = JSON.parse(e.target.result);
+                        const response = await window.apiClient.importAllData(importData);
+
+                        if (response.success) {
+                            this.showNotification('Все данные успешно импортированы!', false);
+                            // After importing all data, we need to completely refresh the UI
+                            // This means reloading current quote, current catalog, and settings
+                            await this.loadGlobalSettings(); // Reload settings
+                            await this.loadCatalogForRegion(this.currentRegion); // Reload current region catalog
+                            // Reload current quote if any
+                            if (this.state.currentQuoteFile) {
+                                await this.loadQuoteFromServer(this.state.currentQuoteFile);
+                            } else {
+                                this.reset(); // If no quote was open, start fresh
+                            }
+                        } else {
+                            this.showNotification(`Ошибка импорта всех данных: ${response.error}`, true);
+                        }
+                    } catch (error) {
+                        this.showNotification('Ошибка чтения или импорта файла: ' + error.message, true);
+                        console.error('Import All Data Error:', error);
+                    } finally {
+                        event.target.value = ''; // Reset file input
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+
+            async exportAllData() {
+                if (!confirm('Экспортировать все данные? Будет создан JSON файл со всеми сметами, каталогами и настройками.')) {
+                    return;
+                }
+
+                try {
+                    const response = await window.apiClient.exportAllData(); // This API returns the JSON data
+                    if (response) {
+                        const jsonString = JSON.stringify(response, null, 2);
+                        const filename = `magellania_full_export_${new Date().toISOString().split('T')[0]}.json`;
+                        this.downloadJSON(jsonString, filename);
+                        this.showNotification('Все данные успешно экспортированы!');
+                    } else {
+                        this.showNotification('Ошибка экспорта всех данных: Не получен ответ от сервера.', true);
+                    }
+                } catch (error) {
+                    this.showNotification('Ошибка экспорта всех данных: ' + error.message, true);
+                    console.error('Export All Data Error:', error);
+                }
+            }
+
+            async exportDatabase() {
+                if (!confirm('Экспортировать базу данных (SQLite)? Будет скачан файл quotes.db. Продолжить?')) {
+                    return;
+                }
+
+                try {
+                    // Assuming apiClient.exportDatabase() directly triggers a download or returns a Blob
+                    // If it returns a Blob:
+                    const response = await window.apiClient.exportDatabase();
+                    if (response instanceof Blob) {
+                        const filename = `magellania_quotes_db_backup_${new Date().toISOString().split('T')[0]}.db`;
+                        const url = window.URL.createObjectURL(response);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        this.showNotification('База данных успешно экспортирована!');
+                    } else {
+                        // If apiClient already triggers download, just show notification
+                        this.showNotification('База данных успешно экспортирована!', false);
+                    }
+                } catch (error) {
+                    this.showNotification('Ошибка экспорта базы данных: ' + error.message, true);
+                    console.error('Export Database Error:', error);
+                }
+            }
 
             // JSON Catalog functions
             // ===== FILE SYSTEM ACCESS API METHODS =====
