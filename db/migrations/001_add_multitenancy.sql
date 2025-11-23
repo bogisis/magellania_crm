@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_org ON users(organization_id);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(organization_id, role);
 
 -- ============================================================================
 
@@ -141,13 +140,15 @@ VALUES (
 );
 
 -- Создаём default user
-INSERT OR IGNORE INTO users (id, email, name, organization_id, role, created_at, updated_at)
+INSERT OR IGNORE INTO users (id, email, password_hash, full_name, organization_id, is_admin, is_active, created_at, updated_at)
 VALUES (
     'user_default',
     'admin@local',
+    '!', -- Placeholder password hash, as it's NOT NULL
     'Default Admin',
     'org_default',
-    'owner',
+    1,
+    1,
     strftime('%s', 'now'),
     strftime('%s', 'now')
 );
@@ -187,7 +188,7 @@ WHERE u.deleted_at IS NULL AND o.deleted_at IS NULL;
 CREATE VIEW IF NOT EXISTS estimates_with_owner AS
 SELECT
     e.*,
-    u.name as owner_name,
+    u.full_name as owner_name,
     u.email as owner_email,
     o.name as organization_name
 FROM estimates e
