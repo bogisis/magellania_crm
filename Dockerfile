@@ -69,6 +69,7 @@ ENV LOG_CONSOLE=true
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:4000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
+ENTRYPOINT ["/usr/src/app/scripts/entrypoint.sh"]
 CMD ["node", "server-with-db.js"]
 
 # ============================================
@@ -103,4 +104,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:4000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application
+ENTRYPOINT ["/usr/src/app/scripts/entrypoint.sh"]
 CMD ["node", "server-with-db.js"]
