@@ -19,7 +19,7 @@ INSERT OR IGNORE INTO organizations (
     created_at,
     updated_at
 ) VALUES (
-    'default-org',
+    'org_default',
     'Default Organization',
     'default',
     'free',
@@ -77,7 +77,7 @@ INSERT OR IGNORE INTO users (
     1,
     1,
     1,
-    'default-org',
+    'org_default',
     strftime('%s', 'now'),
     strftime('%s', 'now')
 );
@@ -85,7 +85,7 @@ INSERT OR IGNORE INTO users (
 -- Обновляем owner_id для default organization
 UPDATE organizations
 SET owner_id = 'admin-user-001'
-WHERE id = 'default-org' AND owner_id IS NULL;
+WHERE id = 'org_default' AND owner_id IS NULL;
 
 -- ============================================================================
 -- Views
