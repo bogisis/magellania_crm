@@ -11,6 +11,7 @@ class MigrationRunner {
     constructor(dbPath) {
         this.db = new Database(dbPath);
         this.db.pragma('journal_mode = WAL');
+        this.db.pragma('foreign_keys = ON'); // Moved here
         this.migrationsDir = __dirname;
         this.baseSchemaPath = path.join(__dirname, '../schema.sql');
     }
