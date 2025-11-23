@@ -99,10 +99,3 @@ FROM estimates e
 LEFT JOIN users u ON e.owner_id = u.id
 LEFT JOIN organizations o ON e.organization_id = o.id
 WHERE e.deleted_at IS NULL;
-
--- ============================================================================
--- MIGRATION METADATA
--- ============================================================================
-
-INSERT INTO schema_migrations (version, name, applied_at)
-VALUES (2, 'remove_filename_unique', strftime('%s', 'now'));
