@@ -12,6 +12,32 @@ class MigrationRunner {
         this.db = new Database(dbPath);
         this.db.pragma('journal_mode = WAL');
         this.migrationsDir = __dirname;
+        this.baseSchemaPath = path.join(__dirname, '../schema.sql');
+    }
+
+    /**
+     * Apply the base schema from db/schema.sql if it hasn't been applied yet.
+     */
+    applyBaseSchema() {
+        try {
+            // Check if a key table (e.g., estimates) already exists.
+            const tableExists = this.db.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='estimates'"
+            ).get();
+
+            if (tableExists) {
+                // If the table exists, we assume the base schema is already in place.
+                return;
+            }
+
+            console.log('Applying base schema from db/schema.sql...');
+            const sql = fs.readFileSync(this.baseSchemaPath, 'utf-8');
+            this.db.exec(sql);
+            console.log('✓ Base schema applied successfully.');
+        } catch (err) {
+            console.error(`✗ Failed to apply base schema: ${err.message}`);
+            throw err;
+        }
     }
 
     /**
@@ -19,12 +45,15 @@ class MigrationRunner {
      */
     getAppliedMigrations() {
         try {
+            // Ensure schema_migrations table exists before querying it.
+            this.db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL);");
             const result = this.db.prepare(
                 'SELECT version FROM schema_migrations ORDER BY version'
             ).all();
             return result.map(r => r.version);
         } catch (err) {
-            // Таблица ещё не создана
+            // This should not happen anymore with the CREATE TABLE IF NOT EXISTS.
+            console.error(`Error getting applied migrations: ${err.message}`);
             return [];
         }
     }
@@ -35,7 +64,7 @@ class MigrationRunner {
     getAvailableMigrations() {
         const files = fs.readdirSync(this.migrationsDir)
             .filter(f => f.endsWith('.sql') && f.match(/^\d+_/))
-            .sort();
+            .sort((a, b) => parseInt(a) - parseInt(b)); // Sort numerically
 
         return files.map(file => {
             const version = parseInt(file.split('_')[0]);
@@ -59,8 +88,10 @@ class MigrationRunner {
 
         // Выполняем миграцию в транзакции
         const transaction = this.db.transaction(() => {
-            // Выполняем SQL (может быть несколько statements)
             this.db.exec(sql);
+            // Record the migration in the same transaction
+            this.db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+               .run(migration.version, migration.name, Math.floor(Date.now() / 1000));
         });
 
         try {
@@ -109,13 +140,16 @@ class MigrationRunner {
      * Запустить все непримененные миграции
      */
     migrate() {
+        // First, ensure the base schema is in place.
+        this.applyBaseSchema();
+
         const applied = this.getAppliedMigrations();
         const available = this.getAvailableMigrations();
 
         const pending = available.filter(m => !applied.includes(m.version));
 
         if (pending.length === 0) {
-            console.log('No pending migrations');
+            console.log('No pending migrations.');
             return;
         }
 
@@ -125,7 +159,7 @@ class MigrationRunner {
             this.applyMigration(migration);
         }
 
-        console.log(`\n✓ All migrations applied successfully`);
+        console.log(`\n✓ All migrations applied successfully.`);
     }
 
     /**
