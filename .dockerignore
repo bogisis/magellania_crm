@@ -53,4 +53,6 @@ settings/*.json
 
 # Scripts
 scripts/
+!scripts/entrypoint.sh
+!scripts/migrate-to-db.js
 .github/
