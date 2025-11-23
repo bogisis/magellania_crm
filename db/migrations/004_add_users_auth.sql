@@ -71,7 +71,7 @@ INSERT OR IGNORE INTO users (
     'admin-user-001',
     'admin@localhost',
     'admin',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',  -- admin123
+    '$2b$10$amUBhN8kJvF84MZ.e4hwo.Ji5/anVfj0u8xqVJuSuNhdiOZ6EMKfe',  -- admin123
     'Administrator',
     'local',
     1,
