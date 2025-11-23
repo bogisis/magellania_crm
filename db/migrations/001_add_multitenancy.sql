@@ -10,21 +10,19 @@
 CREATE TABLE IF NOT EXISTS organizations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-
-    -- Subscription
-    plan TEXT DEFAULT 'free',  -- free, pro, enterprise
+    slug TEXT UNIQUE,
+    settings TEXT,
+    plan TEXT DEFAULT 'free',
+    subscription_status TEXT DEFAULT 'active',
+    subscription_expires INTEGER,
     max_users INTEGER DEFAULT 5,
     max_estimates INTEGER DEFAULT 100,
-
-    -- Settings
-    settings TEXT,  -- JSON: брендинг, лого, и т.д.
-
-    -- Временные метки
+    storage_limit_mb INTEGER DEFAULT 100,
+    owner_id TEXT,
+    logo_url TEXT,
+    website TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-
-    -- Soft delete
     deleted_at INTEGER DEFAULT NULL
 );
 
@@ -37,30 +35,31 @@ CREATE INDEX IF NOT EXISTS idx_organizations_deleted ON organizations(deleted_at
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
-    email_verified INTEGER DEFAULT 0,
-
-    -- Auth (для будущего)
-    password_hash TEXT,
-
-    -- Profile
-    name TEXT,
+    username TEXT UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT,
+    full_name TEXT,
+    phone TEXT,
     avatar_url TEXT,
-
-    -- Organization membership
+    google_id TEXT UNIQUE,
+    oauth_provider TEXT,
+    oauth_data TEXT,
+    email_verified INTEGER DEFAULT 0,
+    email_verification_token TEXT,
+    email_verification_expires INTEGER,
+    password_reset_token TEXT,
+    password_reset_expires INTEGER,
+    is_active INTEGER DEFAULT 1,
+    is_admin INTEGER DEFAULT 0,
     organization_id TEXT NOT NULL,
-    role TEXT DEFAULT 'member',  -- owner, admin, member, viewer
-
-    -- Settings
-    preferences TEXT,  -- JSON: язык, timezone, и т.д.
-
-    -- Временные метки
+    last_login_at INTEGER,
+    last_login_ip TEXT,
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until INTEGER,
+    preferences TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    last_login_at INTEGER,
-
-    -- Soft delete
     deleted_at INTEGER DEFAULT NULL,
-
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
@@ -72,25 +71,32 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(organization_id, role);
 
 -- Sessions (для будущего JWT/session auth)
 CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    token TEXT UNIQUE NOT NULL,
-
-    -- Security
-    ip_address TEXT,
-    user_agent TEXT,
-
-    -- Expiration
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    last_activity_at INTEGER,
-
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    sid TEXT PRIMARY KEY,
+    sess TEXT NOT NULL,
+    expired INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired);
+
+-- ============================================================================
+
+-- Audit log для аутентификации
+CREATE TABLE IF NOT EXISTS auth_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    action TEXT NOT NULL,  -- 'login', 'logout', 'register', 'password_reset', 'failed_login'
+    ip_address TEXT,
+    user_agent TEXT,
+    success INTEGER DEFAULT 1,  -- boolean
+    error_message TEXT,
+    metadata TEXT,  -- JSON с дополнительными данными
+    created_at INTEGER NOT NULL
+);
+
+-- Индексы для auth_logs
+CREATE INDEX IF NOT EXISTS idx_auth_logs_user ON auth_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_action ON auth_logs(action);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_created ON auth_logs(created_at DESC);
 
 -- ============================================================================
 
