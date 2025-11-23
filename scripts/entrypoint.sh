@@ -5,7 +5,7 @@
 set -e
 
 echo "Running database migrations..."
-npm run migrate:run
+npm run db:migrate
 
 echo "Starting server..."
 exec "$@"

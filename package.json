@@ -43,6 +43,7 @@
     "db:import": "./scripts/import-db.sh",
     "db:check": "./scripts/check-db-compatibility.sh",
     "db:backup:vps": "./scripts/backup-vps-production.sh",
+    "db:migrate": "node db/migrations/runner.js migrate",
     "promote:production": "./scripts/promote-to-production.sh",
     "release:create": "echo 'Usage: git tag v2.X.X && git push --tags' && read -p 'Enter version (v2.X.X): ' version && git tag $version && git push --tags",
     "release:list": "git tag -l 'v*' --sort=-v:refname | head -10"
