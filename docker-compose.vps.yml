@@ -36,12 +36,12 @@ services:
       - NODE_ENV=production
       - PORT=4000
       - STORAGE_TYPE=sqlite
-      - DB_PATH=/app/db/quotes.db
+      - DB_PATH=db/quotes.db
       - LOG_LEVEL=info
       - LOG_CONSOLE=false
     volumes:
       # Persistent data
-      - quote-prod-db:/app/db
+      - quote-prod-db:/usr/src/app/db
       - quote-prod-logs:/app/logs
       - quote-prod-catalog:/app/catalogs
       - quote-prod-estimate:/app/estimate
@@ -88,12 +88,12 @@ services:
       - NODE_ENV=staging
       - PORT=4001
       - STORAGE_TYPE=sqlite
-      - DB_PATH=/app/db/quotes.db
+      - DB_PATH=db/quotes.db
       - LOG_LEVEL=debug
       - LOG_CONSOLE=true
     volumes:
       # Separate persistent data для staging
-      - quote-staging-db:/app/db
+      - quote-staging-db:/usr/src/app/db
       - quote-staging-logs:/app/logs
       - quote-staging-catalog:/app/catalogs
       - quote-staging-estimate:/app/estimate
