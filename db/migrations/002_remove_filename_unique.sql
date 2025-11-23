@@ -92,7 +92,7 @@ SELECT * FROM estimates WHERE deleted_at IS NULL;
 CREATE VIEW estimates_with_owner AS
 SELECT
     e.*,
-    u.name as owner_name,
+    u.full_name as owner_name,
     u.email as owner_email,
     o.name as organization_name
 FROM estimates e
