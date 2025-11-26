@@ -14,7 +14,7 @@ LABEL version="3.0.0"
 LABEL description="Quote Calculator with SQLite production deployment"
 
 # Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
 # Install SQLite (needed for better-sqlite3)
 RUN apk add --no-cache sqlite python3 make g++
@@ -52,7 +52,7 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Create directories with proper permissions
 RUN mkdir -p db logs catalogs estimate backup settings && \
-    chown -R nodejs:nodejs /usr/src/app
+    chown -R nodejs:nodejs /app
 
 USER nodejs
 
@@ -88,7 +88,7 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Create directories with proper permissions
 RUN mkdir -p db logs catalogs estimate backup settings && \
-    chown -R nodejs:nodejs /usr/src/app
+    chown -R nodejs:nodejs /app
 
 USER nodejs
 

@@ -8,7 +8,7 @@ echo "🚀 Quote Calculator - Docker Initialization"
 echo "==========================================="
 
 # Database path
-DB_PATH="${DB_PATH:-/usr/src/app/db/quotes.db}"
+DB_PATH="${DB_PATH:-/app/db/quotes.db}"
 export DB_PATH
 
 # Check if database needs initialization
