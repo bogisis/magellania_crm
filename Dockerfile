@@ -50,17 +50,18 @@ RUN --mount=type=bind,source=package.json,target=package.json \
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Create directories with proper permissions
-RUN mkdir -p db logs catalogs estimate backup settings && \
-    chown -R nodejs:nodejs /app
-
-USER nodejs
-
-# Copy application code
-COPY --chown=nodejs:nodejs . .
+# Copy application code (as root first)
+COPY . .
 
 # Make init script executable
 RUN chmod +x docker-init.sh
+
+# Create directories with proper permissions and set ownership
+RUN mkdir -p db logs catalogs estimate backup settings && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
 
 # Environment
 ENV NODE_ENV=development
@@ -80,23 +81,24 @@ CMD ["./docker-init.sh"]
 FROM base as prod
 
 # Copy production dependencies from deps stage
-COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
 # Create non-root user for production
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Create directories with proper permissions
-RUN mkdir -p db logs catalogs estimate backup settings && \
-    chown -R nodejs:nodejs /app
-
-USER nodejs
-
-# Copy application code
-COPY --chown=nodejs:nodejs . .
+# Copy application code (as root first)
+COPY . .
 
 # Make init script executable
 RUN chmod +x docker-init.sh
+
+# Create directories with proper permissions and set ownership
+RUN mkdir -p db logs catalogs estimate backup settings && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
 
 # Environment
 ENV NODE_ENV=production
