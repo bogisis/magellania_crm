@@ -28,9 +28,11 @@ services:
 
     # Volumes для development (bind mounts для hot-reload)
     volumes:
-      # Code (для hot-reload) - исключаем node_modules
+      # Code (для hot-reload)
       - .:/usr/src/app
-      - /usr/src/app/node_modules
+
+      # Named volume для node_modules (важно!)
+      - dev-node-modules:/usr/src/app/node_modules
 
       # Persistent data
       - ./db:/usr/src/app/db
@@ -39,8 +41,8 @@ services:
       - ./estimate:/usr/src/app/estimate
       - ./backup:/usr/src/app/backup
 
-    # Restart policy для dev
-    restart: on-failure
+    # Restart policy для dev (always для поддержки database import restart)
+    restart: unless-stopped
 
     # Команда с nodemon для hot-reload (опционально)
     # command: npx nodemon server-with-db.js
@@ -52,3 +54,8 @@ services:
 networks:
   quote-calculator-dev-network:
     driver: bridge
+
+# Named volume для node_modules
+volumes:
+  dev-node-modules:
+    name: quote-dev-node-modules

@@ -59,6 +59,9 @@ USER nodejs
 # Copy application code
 COPY --chown=nodejs:nodejs . .
 
+# Make init script executable
+RUN chmod +x docker-init.sh
+
 # Environment
 ENV NODE_ENV=development
 ENV STORAGE_TYPE=sqlite
@@ -69,7 +72,7 @@ ENV LOG_CONSOLE=true
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:4000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-CMD ["node", "server-with-db.js"]
+CMD ["./docker-init.sh"]
 
 # ============================================
 # Production stage - минимальный образ
@@ -92,6 +95,9 @@ USER nodejs
 # Copy application code
 COPY --chown=nodejs:nodejs . .
 
+# Make init script executable
+RUN chmod +x docker-init.sh
+
 # Environment
 ENV NODE_ENV=production
 ENV STORAGE_TYPE=sqlite
@@ -102,5 +108,5 @@ ENV LOG_CONSOLE=false
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:4000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start application
-CMD ["node", "server-with-db.js"]
+# Start application with initialization
+CMD ["./docker-init.sh"]

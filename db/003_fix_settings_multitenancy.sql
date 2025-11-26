@@ -45,10 +45,3 @@ ALTER TABLE settings_new RENAME TO settings;
 
 -- Шаг 5: Пересоздаём индекс
 CREATE INDEX IF NOT EXISTS idx_settings_org ON settings(organization_id);
-
--- ============================================================================
--- MIGRATION METADATA
--- ============================================================================
-
-INSERT INTO schema_migrations (version, name, applied_at)
-VALUES (3, 'fix_settings_multitenancy', strftime('%s', 'now'));

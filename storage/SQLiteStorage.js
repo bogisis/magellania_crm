@@ -43,10 +43,11 @@ class SQLiteStorage extends StorageAdapter {
         // Prepared statements (для производительности)
         this.statements = {};
 
-        // Multi-tenancy defaults (для backward compatibility и тестирования)
-        // В production эти значения будут передаваться из auth middleware
-        this.defaultUserId = config.userId || 'user_default';
-        this.defaultOrganizationId = config.organizationId || 'org_default';
+        // Multi-tenancy defaults (production values)
+        // ВАЖНО: Всегда используем superadmin и magellania-org как defaults
+        // См. миграцию 010_superadmin_setup.sql и CLAUDE.md
+        this.defaultUserId = config.userId || 'superadmin';
+        this.defaultOrganizationId = config.organizationId || 'magellania-org';
 
         // App version для metadata
         this.appVersion = config.appVersion || '2.3.0';
@@ -69,6 +70,9 @@ class SQLiteStorage extends StorageAdapter {
             this.db = new Database(this.dbPath, {
                 verbose: process.env.NODE_ENV === 'development' ? console.log : null
             });
+
+            // ВАЖНО: Включаем FOREIGN KEY constraints (по умолчанию выключены в SQLite!)
+            this.db.pragma('foreign_keys = ON');
 
             // Применяем схему
             await this._applySchema();
@@ -175,23 +179,23 @@ class SQLiteStorage extends StorageAdapter {
         // ========================================================================
 
         this.statements.insertBackup = this.db.prepare(`
-            INSERT INTO backups (estimate_id, data, backup_type, created_at, owner_id, organization_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO backups (entity_type, entity_id, data, data_version, data_hash, backup_type, created_at, created_by, organization_id)
+            VALUES ('estimate', ?, ?, 1, NULL, ?, ?, ?, ?)
         `);
 
         this.statements.getBackup = this.db.prepare(`
             SELECT * FROM backups
-            WHERE estimate_id = ? AND organization_id = ?
+            WHERE entity_type = 'estimate' AND entity_id = ? AND organization_id = ?
             ORDER BY id DESC LIMIT 1
         `);
 
         this.statements.listBackups = this.db.prepare(`
-            SELECT b.id, b.estimate_id, b.created_at,
+            SELECT b.id, b.entity_id as estimate_id, b.created_at,
                    e.filename, e.client_name, e.pax_count, e.tour_start
             FROM backups b
-            LEFT JOIN estimates e ON b.estimate_id = e.id
-            WHERE b.organization_id = ?
-            GROUP BY b.estimate_id
+            LEFT JOIN estimates e ON b.entity_id = e.id AND b.entity_type = 'estimate'
+            WHERE b.organization_id = ? AND b.entity_type = 'estimate'
+            GROUP BY b.entity_id
             HAVING b.created_at = MAX(b.created_at)
             ORDER BY b.created_at DESC
         `);
@@ -201,20 +205,27 @@ class SQLiteStorage extends StorageAdapter {
         // ========================================================================
 
         this.statements.upsertCatalog = this.db.prepare(`
-            INSERT INTO catalogs (id, name, version, data, region, templates_count, created_at, updated_at, owner_id, organization_id, visibility)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
+            INSERT INTO catalogs (id, name, slug, version, data, region, templates_count, created_at, updated_at, owner_id, organization_id, visibility, data_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(organization_id, slug) DO UPDATE SET
                 name = excluded.name,
                 data = excluded.data,
                 region = excluded.region,
                 templates_count = excluded.templates_count,
                 updated_at = excluded.updated_at,
-                visibility = excluded.visibility
+                visibility = excluded.visibility,
+                data_version = excluded.data_version,
+                deleted_at = NULL  -- ✅ FIX: Восстанавливаем удалённый каталог при повторном импорте
         `);
 
         this.statements.getCatalogByName = this.db.prepare(`
             SELECT * FROM catalogs
             WHERE name = ? AND organization_id = ? AND deleted_at IS NULL
+        `);
+
+        this.statements.getCatalogById = this.db.prepare(`
+            SELECT * FROM catalogs
+            WHERE id = ? AND organization_id = ? AND deleted_at IS NULL
         `);
 
         this.statements.listCatalogs = this.db.prepare(`
@@ -223,25 +234,25 @@ class SQLiteStorage extends StorageAdapter {
         `);
 
         // ========================================================================
-        // Settings - Multi-Tenant
+        // Settings - Multi-Tenant (Migration 009: scope-based)
         // ========================================================================
 
         this.statements.upsertSetting = this.db.prepare(`
-            INSERT INTO settings (key, value, created_at, updated_at, organization_id)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(key, organization_id) DO UPDATE SET
+            INSERT INTO settings (scope, scope_id, key, value, value_type, description, created_at, updated_at)
+            VALUES ('organization', ?, ?, ?, 'object', NULL, ?, ?)
+            ON CONFLICT(scope, scope_id, key) DO UPDATE SET
                 value = excluded.value,
                 updated_at = excluded.updated_at
         `);
 
         this.statements.getSetting = this.db.prepare(`
             SELECT value FROM settings
-            WHERE key = ? AND organization_id = ?
+            WHERE scope = 'organization' AND scope_id = ? AND key = ?
         `);
 
         this.statements.getAllSettings = this.db.prepare(`
             SELECT key, value FROM settings
-            WHERE organization_id = ?
+            WHERE scope = 'organization' AND scope_id = ?
         `);
     }
 
@@ -536,15 +547,16 @@ class SQLiteStorage extends StorageAdapter {
         const now = Math.floor(Date.now() / 1000);
         const dataStr = JSON.stringify(data);
 
-        const ownerId = userId || this.defaultUserId;
+        const createdBy = userId || this.defaultUserId;
         const orgId = organizationId || this.defaultOrganizationId;
 
+        // New schema: (entity_type, entity_id, data, data_version, data_hash, backup_type, created_at, created_by, organization_id)
         this.statements.insertBackup.run(
-            estimateId,     // estimate_id
-            dataStr,
-            'auto',
-            now,
-            ownerId,        // owner_id
+            estimateId,     // entity_id
+            dataStr,        // data
+            'auto',         // backup_type
+            now,            // created_at
+            createdBy,      // created_by
             orgId           // organization_id
         );
 
@@ -607,6 +619,24 @@ class SQLiteStorage extends StorageAdapter {
     }
 
     /**
+     * Загрузить каталог по ID
+     * @param {string} id - UUID каталога
+     * @param {string} organizationId - ID организации (опционально)
+     */
+    async loadCatalogById(id, organizationId = null) {
+        await this.init();
+
+        const orgId = organizationId || this.defaultOrganizationId;
+        const row = this.statements.getCatalogById.get(id, orgId);
+
+        if (!row) {
+            throw new Error(`Catalog not found: ${id}`);
+        }
+
+        return JSON.parse(row.data);
+    }
+
+    /**
      * Сохранить каталог - Multi-Tenant + Visibility
      * @param {string} name - Имя каталога
      * @param {object} data - Данные каталога
@@ -628,12 +658,28 @@ class SQLiteStorage extends StorageAdapter {
 
         // Используем существующий ID или генерируем новый на основе name
         const id = existing ? existing.id : this._generateIdFromString(name);
-        const region = data.region || '';
+        const region = data.region || name;  // ✅ FIX: используем name если data.region пустой
         const templatesCount = Array.isArray(data.templates) ? data.templates.length : 0;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+        // Детальное логирование для отладки FOREIGN KEY
+        console.log('[SQLite saveCatalog] Parameters:', {
+            id, name, slug, ownerId, orgId, visibility,
+            existingCatalog: existing ? 'UPDATE' : 'INSERT'
+        });
+
+        // Проверяем существование пользователя и организации
+        const userExists = this.db.prepare('SELECT id FROM users WHERE id = ?').get(ownerId);
+        const orgExists = this.db.prepare('SELECT id FROM organizations WHERE id = ?').get(orgId);
+        console.log('[SQLite saveCatalog] FK Check:', {
+            userExists: !!userExists,
+            orgExists: !!orgExists
+        });
 
         this.statements.upsertCatalog.run(
             id,
             name,
+            slug,           // slug
             data.version || '1.2.0',
             dataStr,
             region,
@@ -642,7 +688,8 @@ class SQLiteStorage extends StorageAdapter {
             now,            // updated_at
             ownerId,        // owner_id
             orgId,          // organization_id
-            visibility      // visibility
+            visibility,     // visibility
+            existing ? existing.data_version + 1 : 1  // data_version (increment on update)
         );
 
         return { success: true };

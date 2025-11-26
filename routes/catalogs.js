@@ -45,21 +45,21 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 /**
- * GET /api/catalogs/:name
- * Get a specific catalog by name
+ * GET /api/v1/catalogs/:id
+ * Get a specific catalog by ID
  */
-router.get('/:name', requireAuth, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
     try {
         const storage = req.app.locals.storage;
-        const { name } = req.params;
+        const { id } = req.params;
         const organizationId = req.user.organization_id;
 
-        const data = await storage.loadCatalog(name, organizationId);
+        const data = await storage.loadCatalogById(id, organizationId);
 
         logger.info('Catalog loaded', {
             userId: req.user.id,
             organizationId,
-            catalogName: name
+            catalogId: id
         });
 
         res.json({
@@ -71,7 +71,7 @@ router.get('/:name', requireAuth, async (req, res) => {
             context: 'Load catalog',
             userId: req.user?.id,
             organizationId: req.user?.organization_id,
-            catalogName: req.params.name
+            catalogId: req.params.id
         });
 
         // 404 если каталог не найден

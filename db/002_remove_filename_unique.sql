@@ -92,17 +92,10 @@ SELECT * FROM estimates WHERE deleted_at IS NULL;
 CREATE VIEW estimates_with_owner AS
 SELECT
     e.*,
-    u.name as owner_name,
+    u.full_name as owner_name,
     u.email as owner_email,
     o.name as organization_name
 FROM estimates e
 LEFT JOIN users u ON e.owner_id = u.id
 LEFT JOIN organizations o ON e.organization_id = o.id
 WHERE e.deleted_at IS NULL;
-
--- ============================================================================
--- MIGRATION METADATA
--- ============================================================================
-
-INSERT INTO schema_migrations (version, name, applied_at)
-VALUES (2, 'remove_filename_unique', strftime('%s', 'now'));

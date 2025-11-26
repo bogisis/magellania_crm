@@ -8,31 +8,98 @@ class APIClient {
         this.currentEstimateFilename = null;
     }
 
-    // ============ Каталог ============
+    // ============ Каталог (v3 Migration - Server-based) ============
 
-    async getCatalogList() {
-        const response = await fetch(`${this.baseURL}/api/catalog/list`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result.files;
-    }
-
-    async loadCatalog(filename = 'catalog.json') {
-        const response = await fetch(`${this.baseURL}/api/catalog/${filename}`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result.data;
-    }
-
-    async saveCatalog(data, filename = 'catalog.json') {
-        const response = await fetch(`${this.baseURL}/api/catalog/${filename}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+    /**
+     * Get list of catalogs for current user's organization
+     * @returns {Promise<{success: boolean, data: {catalogs: Array}}>}
+     */
+    async getCatalogsList() {
+        const response = await fetch(`${this.baseURL}/api/v1/catalogs`, {
+            method: 'GET',
+            headers: this.getAuthHeaders()
         });
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result;
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Load full catalog data by ID
+     * @param {string} id - Catalog UUID
+     * @returns {Promise<{success: boolean, data: Object}>}
+     */
+    async loadCatalogById(id) {
+        const response = await fetch(`${this.baseURL}/api/v1/catalogs/${id}`, {
+            method: 'GET',
+            headers: this.getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Catalog not found');
+            }
+            if (response.status === 401) {
+                throw new Error('Authentication required');
+            }
+            if (response.status === 403) {
+                throw new Error('Access denied');
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Create or update catalog
+     * @param {string} name - Catalog name
+     * @param {Object} data - Catalog data (templates, categories)
+     * @param {string} visibility - 'organization'|'public'|'private'
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async saveCatalog(name, data, visibility = 'organization') {
+        const response = await fetch(`${this.baseURL}/api/v1/catalogs`, {
+            method: 'POST',
+            headers: {
+                ...this.getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, data, visibility })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Save failed');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Helper: Get authorization headers
+     * @returns {Object}
+     */
+    getAuthHeaders() {
+        // ✅ SECURITY (Migration 010): Только реальная JWT авторизация
+        // Auth guard в index.html предотвращает инициализацию без токена
+        const token = localStorage.getItem('jwt_token') || localStorage.getItem('authToken');
+
+        if (!token) {
+            // ❌ Токена нет - это не должно происходить если auth guard работает
+            console.error('[APIClient] CRITICAL: No JWT token found! Auth guard failed?');
+
+            // Не делаем редирект здесь - это должен делать auth guard в index.html
+            // Throw error чтобы остановить запрос
+            throw new Error('No authentication token available');
+        }
+
+        return {
+            'Authorization': `Bearer ${token}`
+        };
     }
 
     // ============ Сметы ============
@@ -470,6 +537,106 @@ class APIClient {
     downloadJSON(data, filename) {
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         this.downloadBlob(blob, filename);
+    }
+
+    // ============ Generic HTTP Methods (для SyncManager) ============
+
+    /**
+     * Generic GET request
+     * @param {string} endpoint - API endpoint path
+     * @param {Object} options - Fetch options
+     * @returns {Promise<any>}
+     */
+    async get(endpoint, options = {}) {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+            method: 'GET',
+            headers: {
+                ...this.getAuthHeaders(),
+                ...options.headers
+            },
+            ...options
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Generic POST request
+     * @param {string} endpoint - API endpoint path
+     * @param {Object} data - Request body
+     * @param {Object} options - Fetch options
+     * @returns {Promise<any>}
+     */
+    async post(endpoint, data, options = {}) {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                ...this.getAuthHeaders(),
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            body: JSON.stringify(data),
+            ...options
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Generic PUT request
+     * @param {string} endpoint - API endpoint path
+     * @param {Object} data - Request body
+     * @param {Object} options - Fetch options
+     * @returns {Promise<any>}
+     */
+    async put(endpoint, data, options = {}) {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+            method: 'PUT',
+            headers: {
+                ...this.getAuthHeaders(),
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            body: JSON.stringify(data),
+            ...options
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Generic DELETE request
+     * @param {string} endpoint - API endpoint path
+     * @param {Object} options - Fetch options
+     * @returns {Promise<any>}
+     */
+    async delete(endpoint, options = {}) {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+            method: 'DELETE',
+            headers: {
+                ...this.getAuthHeaders(),
+                ...options.headers
+            },
+            ...options
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
     }
 
     // ============ Утилиты ============

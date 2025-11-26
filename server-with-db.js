@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const passport = require('passport');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -17,6 +18,9 @@ const configurePassport = require('./config/passport');
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalogs');
 const { requireAuth } = require('./middleware/auth');
+
+// API v1 (Migration v3.0 - Multi-Tenancy + JWT)
+const apiV1Router = require('./routes/api-v1');
 
 // DAY 1.3: Disk space validation middleware (Production Safety)
 const { checkDiskSpace, getDiskSpaceInfo } = require('./middleware/diskSpace');
@@ -92,7 +96,8 @@ app.use(express.static('.'));
 // Storage Initialization
 // ============================================================================
 
-// DAY 5: SQLite-only storage
+// DAY 5: SQLite-only storage with backward compatibility
+// Используем defaults (user_default, org_default) для совместимости с legacy data
 const storage = new SQLiteStorage();
 
 // Инициализация storage при старте
@@ -124,7 +129,13 @@ async function initStorage() {
 }
 
 // ============================================================================
-// Authentication API
+// API v1 (Migration v3.0 - Multi-Tenancy + JWT)
+// ============================================================================
+
+app.use('/api/v1', apiV1Router);
+
+// ============================================================================
+// Authentication API (Legacy session-based auth)
 // ============================================================================
 
 app.use('/api/auth', authRoutes);
@@ -138,7 +149,7 @@ app.get('/login', (req, res) => {
 // Catalog API (Multi-Tenant)
 // ============================================================================
 
-app.use('/api/catalogs', catalogRoutes);
+app.use('/api/v1/catalogs', catalogRoutes);
 
 // ============================================================================
 // API для смет
@@ -147,7 +158,8 @@ app.use('/api/catalogs', catalogRoutes);
 app.get('/api/estimates', async (req, res) => {
     try {
         // Multi-tenancy: фильтруем по organization_id пользователя
-        const organizationId = req.user?.organization_id || 'default-org';
+        // По умолчанию magellania-org (Migration 010)
+        const organizationId = req.user?.organization_id || 'magellania-org';
         const estimates = await storage.getEstimatesList(organizationId);
 
         logger.info('Estimates list retrieved', {
@@ -315,7 +327,8 @@ app.post('/api/estimates/batch', checkDiskSpace, async (req, res) => {
 app.get('/api/estimates/:id', async (req, res) => {
     try {
         // Multi-tenancy: используем organization_id пользователя
-        const organizationId = req.user?.organization_id || 'default-org';
+        // По умолчанию magellania-org (Migration 010)
+        const organizationId = req.user?.organization_id || 'magellania-org';
         const data = await storage.loadEstimate(req.params.id, organizationId);
 
         logger.info('Estimate loaded', {
@@ -337,8 +350,12 @@ app.post('/api/estimates/:id', checkDiskSpace, async (req, res) => {
         const { id } = req.params;
         const data = req.body;
 
-        // Save estimate with ID-First architecture
-        await storage.saveEstimate(id, data);
+        // Multi-tenancy: используем пользователя из сессии или defaults
+        const userId = req.user?.id || storage.defaultUserId;
+        const organizationId = req.user?.organization_id || storage.defaultOrganizationId;
+
+        // Save estimate with ID-First architecture + multi-tenancy
+        await storage.saveEstimate(id, data, userId, organizationId);
 
         res.json({ success: true });
     } catch (err) {
@@ -357,7 +374,8 @@ app.post('/api/estimates/:id', checkDiskSpace, async (req, res) => {
 app.delete('/api/estimates/:id', checkDiskSpace, async (req, res) => {
     try {
         // Multi-tenancy: используем organization_id пользователя
-        const organizationId = req.user?.organization_id || 'default-org';
+        // По умолчанию magellania-org (Migration 010)
+        const organizationId = req.user?.organization_id || 'magellania-org';
         await storage.deleteEstimate(req.params.id, organizationId);
 
         logger.info('Estimate deleted', {
@@ -838,11 +856,110 @@ app.get('/api/export/database', async (req, res) => {
     }
 });
 
+/**
+ * Import SQLite database file (only for SQLiteStorage)
+ * POST /api/import/database
+ * Body: Raw SQLite database file (application/octet-stream)
+ * Returns: { success: boolean, message: string }
+ */
+app.post('/api/import/database', express.raw({ type: 'application/octet-stream', limit: '100mb' }), async (req, res) => {
+    try {
+        // This endpoint only works with SQLiteStorage
+        if (storage.constructor.name !== 'SQLiteStorage') {
+            return res.status(400).json({
+                success: false,
+                error: 'Database import is only available for SQLite storage'
+            });
+        }
+
+        const dbBuffer = req.body;
+
+        if (!dbBuffer || dbBuffer.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No database file provided'
+            });
+        }
+
+        logger.info('Importing SQLite database', {
+            sizeBytes: dbBuffer.length
+        });
+
+        const fs = require('fs');
+        const path = require('path');
+
+        // Get database path from storage
+        const dbPath = storage.dbPath;
+        const backupPath = `${dbPath}.backup-${Date.now()}`;
+
+        // 1. Create backup of current database
+        logger.info('Creating backup of current database', { backupPath });
+        if (fs.existsSync(dbPath)) {
+            fs.copyFileSync(dbPath, backupPath);
+        }
+
+        try {
+            // 2. Close ALL database connections (storage + AuthService)
+            logger.info('Closing all database connections');
+            storage.db.close();
+
+            // Close AuthService database if it exists
+            if (global.authService && global.authService.db) {
+                global.authService.db.close();
+            }
+
+            // 3. Write new database file
+            logger.info('Writing new database file', { dbPath });
+            fs.writeFileSync(dbPath, dbBuffer);
+
+            logger.info('Database file replaced successfully', {
+                sizeBytes: dbBuffer.length,
+                backupPath
+            });
+
+            // 4. Send success response BEFORE restarting
+            res.json({
+                success: true,
+                message: 'Database imported successfully. Server will restart in 2 seconds.',
+                backupPath,
+                restart: true
+            });
+
+            // 5. Graceful shutdown and restart (Docker will auto-restart)
+            logger.info('Initiating server restart after database import...');
+            setTimeout(() => {
+                logger.info('Shutting down server for database reload...');
+                process.exit(0); // Docker restart policy will restart the container
+            }, 2000);
+
+        } catch (importError) {
+            // If import fails, restore from backup
+            logger.logError(importError, { context: 'Database import failed, restoring backup' });
+
+            if (fs.existsSync(backupPath)) {
+                logger.info('Restoring database from backup');
+                fs.copyFileSync(backupPath, dbPath);
+                logger.info('Database restored from backup');
+            }
+
+            throw importError;
+        }
+
+    } catch (err) {
+        logger.logError(err, { context: 'Import database' });
+        res.status(500).json({
+            success: false,
+            error: err.message || 'Failed to import database'
+        });
+    }
+});
+
 // ============================================================================
 // Health Check
 // ============================================================================
 
-app.get('/health', async (req, res) => {
+// Health check endpoint (with /api/health alias for Docker healthcheck)
+app.get(['/health', '/api/health'], async (req, res) => {
     try {
         const storageHealth = await storage.healthCheck();
         const stats = await storage.getStats();
@@ -870,6 +987,63 @@ app.get('/health', async (req, res) => {
             status: 'unhealthy',
             error: err.message
         });
+    }
+});
+
+// ============================================================================
+// Database Export
+// ============================================================================
+
+// Export SQLite database
+app.get('/api/database/export', requireAuth, async (req, res) => {
+    try {
+        logger.info('Database export requested', {
+            user: req.user ? req.user.username : 'anonymous'
+        });
+
+        // Path to SQLite database
+        const dbPath = process.env.DB_PATH || 'db/quotes.db';
+
+        // Check if database exists
+        if (!fs.existsSync(dbPath)) {
+            logger.warn('Database file not found', { dbPath });
+            return res.status(404).json({
+                success: false,
+                error: 'Database file not found'
+            });
+        }
+
+        // Set response headers for file download
+        const filename = `quotes_backup_${new Date().toISOString().split('T')[0]}.db`;
+        res.setHeader('Content-Type', 'application/x-sqlite3');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // Stream database file to response
+        const fileStream = fs.createReadStream(dbPath);
+        fileStream.on('error', (err) => {
+            logger.logError(err, { context: 'Database export stream' });
+            if (!res.headersSent) {
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to export database'
+                });
+            }
+        });
+
+        fileStream.pipe(res);
+
+        logger.info('Database exported successfully', {
+            filename,
+            user: req.user ? req.user.username : 'anonymous'
+        });
+    } catch (err) {
+        logger.logError(err, { context: 'Database export' });
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                error: err.message
+            });
+        }
     }
 });
 
