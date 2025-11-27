@@ -150,9 +150,18 @@ router.get('/:id', requireAuth, async (req, res) => {
         storage.db.prepare('UPDATE estimates SET last_accessed_at = ? WHERE id = ?')
             .run(Math.floor(Date.now() / 1000), req.params.id);
 
+        // ✅ FIX: Parse JSON data field before sending
+        // Frontend expects parsed object, not string
+        const parsedData = JSON.parse(estimate.data);
+
+        // Add metadata for frontend
+        parsedData.dataVersion = estimate.data_version;
+        parsedData.updatedAt = estimate.updated_at;
+        parsedData.createdAt = estimate.created_at;
+
         res.json({
             success: true,
-            data: estimate
+            data: parsedData
         });
 
     } catch (err) {

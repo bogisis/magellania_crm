@@ -558,7 +558,15 @@ app.post('/api/transaction/commit', checkDiskSpace, async (req, res) => {
 
         // Для SQLite используем транзакционное сохранение
         if (storage.constructor.name === 'SQLiteStorage') {
-            await storage.saveEstimateTransactional(estimateFilename, data);
+            // ✅ FIX: Передаем data.id вместо estimateFilename
+            // SQLiteStorage.saveEstimateTransactional ожидает (id, data, userId, organizationId)
+            if (!data.id) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Missing required field: data.id'
+                });
+            }
+            await storage.saveEstimateTransactional(data.id, data);
             res.json({ success: true, method: 'native', transactionId });
         } else {
             // Для FileStorage - обычное сохранение estimate + backup

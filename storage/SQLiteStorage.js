@@ -180,7 +180,7 @@ class SQLiteStorage extends StorageAdapter {
 
         this.statements.insertBackup = this.db.prepare(`
             INSERT INTO backups (entity_type, entity_id, data, data_version, data_hash, backup_type, created_at, created_by, organization_id)
-            VALUES ('estimate', ?, ?, 1, NULL, ?, ?, ?, ?)
+            VALUES ('estimate', ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         this.statements.getBackup = this.db.prepare(`
@@ -546,6 +546,7 @@ class SQLiteStorage extends StorageAdapter {
 
         const now = Math.floor(Date.now() / 1000);
         const dataStr = JSON.stringify(data);
+        const dataHash = this._calculateHash(dataStr);
 
         const createdBy = userId || this.defaultUserId;
         const orgId = organizationId || this.defaultOrganizationId;
@@ -554,6 +555,8 @@ class SQLiteStorage extends StorageAdapter {
         this.statements.insertBackup.run(
             estimateId,     // entity_id
             dataStr,        // data
+            1,              // data_version (default for backups)
+            dataHash,       // data_hash
             'auto',         // backup_type
             now,            // created_at
             createdBy,      // created_by
@@ -840,11 +843,13 @@ class SQLiteStorage extends StorageAdapter {
 
             // Сохранить backup
             this.statements.insertBackup.run(
-                id,             // estimate_id
-                dataStr,
-                'auto',
-                now,
-                ownerId,        // owner_id
+                id,             // estimate_id (entity_id)
+                dataStr,        // data
+                existing ? existing.data_version + 1 : 1,  // data_version
+                dataHash,       // data_hash
+                'auto',         // backup_type
+                now,            // created_at
+                ownerId,        // created_by
                 orgId           // organization_id
             );
         });
