@@ -857,7 +857,7 @@
             transform: scale(0.95);
         }
 
-        .template-duplicate-btn {
+        .template-other-services-btn {
             position: absolute;
             bottom: 4px;
             left: 4px;
@@ -876,16 +876,16 @@
             z-index: 10;
         }
 
-        .template-item:hover .template-duplicate-btn {
+        .template-item:hover .template-other-services-btn {
             opacity: 1;
         }
 
-        .template-duplicate-btn:hover {
+        .template-other-services-btn:hover {
             background: rgba(59, 130, 246, 0.2);
             transform: scale(1.1);
         }
 
-        .template-duplicate-btn:active {
+        .template-other-services-btn:active {
             transform: scale(0.95);
         }
 
@@ -2499,6 +2499,7 @@
             
             <div style="display: flex; gap: calc(var(--spacing) * 2); margin-top: calc(var(--spacing) * 6);">
                 <button class="btn" onclick="window.QuoteCalc.hideCatalogModal()">Отмена</button>
+                <button class="btn" id="catalog-duplicate-btn" onclick="window.QuoteCalc.duplicateCurrentTemplate()" style="display: none; background: var(--gray-100); flex: 1;">📋 Дублировать шаблон</button>
                 <button class="btn btn-primary" id="catalog-modal-btn" onclick="window.QuoteCalc.addToCatalog()">Добавить</button>
             </div>
         </div>
@@ -4544,20 +4545,20 @@
                                 ${dayField ? `
                                     <div style="display: flex; align-items: center; gap: 6px;">
                                         <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">День:</label>
-                                        <input type="number" class="input ${type}-field" data-field="day" data-service-id="${service.id}" value="${service.day}" min="1" style="width: 50px; font-size: 11px; padding: 4px 6px; text-align: center;">
+                                        <input type="number" class="input ${type}-field" data-field="day" data-service-id="${service.id}" value="${service.day}" min="1" style="width: 50px; font-size: 11px; padding: 4px 6px; text-align: center;" autocomplete="off" data-lpignore="true" data-form-type="other">
                                     </div>
                                 ` : ''}
 
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">${priceLabel}</label>
-                                    <input type="number" class="input ${type}-field" data-field="price" data-service-id="${service.id}" value="${service.price}" min="0" style="width: 80px; font-size: 11px; padding: 4px 6px; text-align: center;">
+                                    <input type="number" class="input ${type}-field" data-field="price" data-service-id="${service.id}" value="${service.price}" min="0" style="width: 80px; font-size: 11px; padding: 4px 6px; text-align: center;" autocomplete="off" data-lpignore="true" data-form-type="other">
                                 </div>
 
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">${quantityLabel}</label>
                                     <div class="qty-control">
                                         <button class="qty-btn qty-decrease" data-service-id="${service.id}" data-type="${type}">−</button>
-                                        <input type="number" class="qty-input ${type}-field" data-field="quantity" data-service-id="${service.id}" value="${service.quantity}" min="1">
+                                        <input type="number" class="qty-input ${type}-field" data-field="quantity" data-service-id="${service.id}" value="${service.quantity}" min="1" autocomplete="off" data-lpignore="true" data-form-type="other">
                                         <button class="qty-btn qty-increase" data-service-id="${service.id}" data-type="${type}">+</button>
                                     </div>
                                 </div>
@@ -4565,13 +4566,13 @@
                                 ${type === 'hotel' ? `
                                     <div style="display: flex; align-items: center; gap: 6px;">
                                         <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">🚪 Номеров:</label>
-                                        <input type="number" class="input ${type}-field" data-field="roomsCount" data-service-id="${service.id}" value="${service.roomsCount || 1}" min="1" style="width: 60px; font-size: 11px; padding: 4px 6px; text-align: center;">
+                                        <input type="number" class="input ${type}-field" data-field="roomsCount" data-service-id="${service.id}" value="${service.roomsCount || 1}" min="1" style="width: 60px; font-size: 11px; padding: 4px 6px; text-align: center;" autocomplete="off" data-lpignore="true" data-form-type="other">
                                     </div>
                                 ` : ''}
 
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <label style="font-size: 10px; color: var(--gray-500); white-space: nowrap;">Наценка:</label>
-                                    <input type="number" class="input ${type}-field" data-field="markup" data-service-id="${service.id}" value="${service.markup || 0}" min="0" style="width: 50px; font-size: 11px; padding: 4px 6px; text-align: center;">
+                                    <input type="number" class="input ${type}-field" data-field="markup" data-service-id="${service.id}" value="${service.markup || 0}" min="0" style="width: 50px; font-size: 11px; padding: 4px 6px; text-align: center;" autocomplete="off" data-lpignore="true" data-form-type="other">
                                     <span style="font-size: 10px; color: var(--gray-500);">%</span>
                                 </div>
                             </div>
@@ -5134,10 +5135,10 @@
                         <div class="template-name">${template.name}</div>
                         ${template.contractor ? `<div class="text-xs text-muted">${template.contractor}</div>` : ''}
                         <div class="template-price">${template.price}</div>
-                        <button class="template-duplicate-btn"
-                                onclick="event.stopPropagation(); window.QuoteCalc.duplicateTemplate('${template.id}')"
-                                title="Дублировать шаблон">
-                            📋
+                        <button class="template-other-services-btn"
+                                onclick="event.stopPropagation(); window.QuoteCalc.addServiceFromTemplateToOtherServices('${template.id}')"
+                                title="Добавить в прочие услуги">
+                            📝
                         </button>
                         <button class="template-optional-btn"
                                 onclick="event.stopPropagation(); window.QuoteCalc.addServiceFromTemplateAsOptional('${template.id}')"
@@ -5275,6 +5276,55 @@
                 this.markQuoteAsUnsaved();
 
                 this.showNotification('Услуга добавлена в опциональные');
+            }
+
+            addServiceFromTemplateToOtherServices(templateId) {
+                const template = this.templates.find(t => t.id === templateId);
+                if (!template || template.editing) return;
+
+                // Track category usage (локальная статистика для сортировки)
+                if (template.category) {
+                    this.trackCategoryUsage(template.category);
+                }
+
+                // Track template usage (локальная статистика для сортировки шаблонов)
+                this.trackTemplateUsage(templateId);
+
+                // Track global usage (глобальная статистика для аналитики)
+                this.trackGlobalUsage(templateId, template.name, template.category);
+
+                const service = {
+                    id: Date.now().toString(),
+                    name: template.name,
+                    description: template.description || template.name,
+                    day: 1,
+                    price: template.price,
+                    quantity: 1,
+                    markup: 0,
+                    contractor: template.contractor || '',
+                    excludeFromMarkup: false,
+                    fullProfit: false,
+                    region: template.region || this.currentRegion, // Берем регион из шаблона
+                    // Checklist fields
+                    done: false,        // Забронировано
+                    paid: false,        // Оплачено
+                    comment: ''         // Комментарий менеджера
+                };
+
+                // Validate before adding
+                const errors = this.validateService(service);
+                if (errors.length > 0) {
+                    this.showNotification(errors.join(', '), true);
+                    return;
+                }
+
+                // Add to other services array
+                this.state.otherServices.unshift(service);
+                this.renderOtherServices();
+                this.updateCalculations();
+                this.markQuoteAsUnsaved();
+
+                this.showNotification('Услуга добавлена в прочие услуги');
             }
 
             showServiceModal() {
@@ -6711,9 +6761,13 @@
                 const modal = document.getElementById('catalog-modal');
                 const modalTitle = document.getElementById('catalog-modal-title');
                 const modalBtn = document.getElementById('catalog-modal-btn');
+                const duplicateBtn = document.getElementById('catalog-duplicate-btn');
 
                 if (modalTitle) modalTitle.textContent = 'Добавить в каталог';
                 if (modalBtn) modalBtn.textContent = 'Добавить';
+
+                // Hide duplicate button in add mode
+                if (duplicateBtn) duplicateBtn.style.display = 'none';
 
                 // Заполняем селектор регионов
                 const regionSelect = document.getElementById('catalog-region');
@@ -6770,6 +6824,8 @@
 
             hideCatalogModal() {
                 const modal = document.getElementById('catalog-modal');
+                const duplicateBtn = document.getElementById('catalog-duplicate-btn');
+
                 if (modal) {
                     modal.classList.remove('show');
 
@@ -6781,6 +6837,9 @@
                             element.classList.remove('error');
                         }
                     });
+
+                    // Hide duplicate button
+                    if (duplicateBtn) duplicateBtn.style.display = 'none';
 
                     // Reset modal to add mode
                     this.editingTemplateId = null;
@@ -6827,9 +6886,13 @@
                 const modal = document.getElementById('catalog-modal');
                 const modalTitle = document.getElementById('catalog-modal-title');
                 const modalBtn = document.getElementById('catalog-modal-btn');
+                const duplicateBtn = document.getElementById('catalog-duplicate-btn');
 
                 if (modalTitle) modalTitle.textContent = 'Редактировать услугу';
                 if (modalBtn) modalBtn.textContent = 'Сохранить';
+
+                // Show duplicate button in edit mode
+                if (duplicateBtn) duplicateBtn.style.display = 'block';
 
                 // Show modal WITHOUT resetting editingTemplateId
                 if (modal) {
@@ -6864,6 +6927,19 @@
                 this.saveToLocalStorage();
 
                 this.showNotification(`📋 Шаблон "${template.name}" продублирован`);
+            }
+
+            duplicateCurrentTemplate() {
+                if (!this.editingTemplateId) {
+                    this.showNotification('Не выбран шаблон для дублирования', true);
+                    return;
+                }
+
+                // Дублировать текущий редактируемый шаблон
+                this.duplicateTemplate(this.editingTemplateId);
+
+                // Закрыть модальное окно
+                this.hideCatalogModal();
             }
 
             deleteTemplate(templateId) {
