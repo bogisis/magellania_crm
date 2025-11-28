@@ -1,29 +1,9 @@
--- ============================================================
--- Quote Calculator v2.3.0 - Database Schema
--- Generated from working production DB on 2025-11-28
--- Replaces sequential migrations 006-010
--- ============================================================
--- This schema creates the complete multi-tenant database structure
--- Safe for both fresh installations and existing databases
--- All CREATE statements use IF NOT EXISTS for idempotency
--- All INSERT statements use INSERT OR IGNORE to preserve existing data
--- ============================================================
---
--- IMPORTANT: This schema includes ALL structures from migrations:
--- - 006_add_multi_tenancy_fields.sql
--- - 007_migrate_existing_data.sql
--- - 008_make_fields_not_null.sql
--- - 009_fix_settings_scope.sql
--- - 010_superadmin_setup.sql
---
--- Production Credentials:
--- - Organization: magellania-org
--- - User: superadmin (email: admin@magellania.com)
--- - Password: magellania2025 (MUST be changed in production!)
--- ============================================================
+-- Quote Calculator Database Schema
+-- SQLite 3.x with JSON1 extension
+-- Version: 3.0.0 (after all multi-tenancy migrations)
+-- Created: 2025-11-23 (generated)
 
-PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
+PRAGMA foreign_keys=OFF;
 
 -- ============================================================================
 -- Tables
@@ -65,7 +45,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     deleted_at INTEGER DEFAULT NULL
 );
 
--- Users (Authentication & Multi-tenancy)
+-- Users
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY NOT NULL,
     email TEXT UNIQUE NOT NULL,
@@ -98,7 +78,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     deleted_at INTEGER DEFAULT NULL,
-    is_admin INTEGER DEFAULT 0,
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
@@ -113,12 +92,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS auth_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
-    action TEXT NOT NULL,
+    action TEXT NOT NULL,  -- 'login', 'logout', 'register', 'password_reset', 'failed_login'
     ip_address TEXT,
     user_agent TEXT,
-    success INTEGER DEFAULT 1,
+    success INTEGER DEFAULT 1,  -- boolean
     error_message TEXT,
-    metadata TEXT,
+    metadata TEXT,  -- JSON with additional data
     created_at INTEGER NOT NULL
 );
 
@@ -127,7 +106,7 @@ CREATE TABLE IF NOT EXISTS estimate_collaborators (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     estimate_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    role TEXT DEFAULT 'viewer',
+    role TEXT DEFAULT 'viewer',  -- owner, editor, viewer
     can_edit INTEGER DEFAULT 0,
     can_delete INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
@@ -137,7 +116,7 @@ CREATE TABLE IF NOT EXISTS estimate_collaborators (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Estimates (Core Data - ID-First Pattern)
+-- Estimates
 CREATE TABLE IF NOT EXISTS estimates (
     id TEXT PRIMARY KEY NOT NULL,
     filename TEXT NOT NULL,
@@ -169,7 +148,7 @@ CREATE TABLE IF NOT EXISTS estimates (
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Backups (Data Versioning)
+-- Backups
 CREATE TABLE IF NOT EXISTS backups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entity_type TEXT NOT NULL,
@@ -186,7 +165,7 @@ CREATE TABLE IF NOT EXISTS backups (
     created_at INTEGER NOT NULL
 );
 
--- Catalogs (Service Templates)
+-- Catalogs
 CREATE TABLE IF NOT EXISTS catalogs (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
@@ -212,7 +191,7 @@ CREATE TABLE IF NOT EXISTS catalogs (
     UNIQUE(organization_id, slug)
 );
 
--- Settings (Scope-Based Configuration - Migration 009)
+-- Settings (scope-based key-value store)
 CREATE TABLE IF NOT EXISTS settings (
     scope TEXT NOT NULL CHECK (scope IN ('app', 'organization', 'user')),
     scope_id TEXT NOT NULL,
@@ -225,7 +204,7 @@ CREATE TABLE IF NOT EXISTS settings (
     PRIMARY KEY (scope, scope_id, key)
 );
 
--- Audit Logs (Entity Change Tracking)
+-- Audit Logs (general entity changes)
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entity_type TEXT NOT NULL,
@@ -256,7 +235,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 -- Indexes
 -- ============================================================================
 
--- Estimates indexes (8 indexes)
+-- Estimates indexes
 CREATE INDEX IF NOT EXISTS idx_estimates_org_updated ON estimates(organization_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_estimates_owner ON estimates(owner_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_estimates_visibility ON estimates(organization_id, visibility);
@@ -266,7 +245,7 @@ CREATE INDEX IF NOT EXISTS idx_estimates_accessed ON estimates(last_accessed_at 
 CREATE INDEX IF NOT EXISTS idx_estimates_templates ON estimates(organization_id, is_template);
 CREATE INDEX IF NOT EXISTS idx_estimates_filename ON estimates(filename);
 
--- Catalogs indexes (6 indexes)
+-- Catalogs indexes
 CREATE INDEX IF NOT EXISTS idx_catalogs_org ON catalogs(organization_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_catalogs_visibility ON catalogs(visibility, organization_id);
 CREATE INDEX IF NOT EXISTS idx_catalogs_region ON catalogs(organization_id, region);
@@ -274,47 +253,47 @@ CREATE INDEX IF NOT EXISTS idx_catalogs_slug ON catalogs(slug);
 CREATE INDEX IF NOT EXISTS idx_catalogs_accessed ON catalogs(last_accessed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_catalogs_name ON catalogs(name);
 
--- Organizations indexes (3 indexes)
+-- Organizations indexes
 CREATE INDEX IF NOT EXISTS idx_orgs_slug ON organizations(slug);
 CREATE INDEX IF NOT EXISTS idx_orgs_active ON organizations(is_active, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orgs_plan ON organizations(plan, subscription_status);
 
--- Users indexes (4 indexes)
+-- Users indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_org ON users(organization_id, role);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active, organization_id);
 
--- Settings indexes (3 indexes)
+-- Settings indexes
 CREATE INDEX IF NOT EXISTS idx_settings_scope ON settings(scope, scope_id);
 CREATE INDEX IF NOT EXISTS idx_settings_updated ON settings(updated_at);
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 
--- Backups indexes (3 indexes)
+-- Backups indexes
 CREATE INDEX IF NOT EXISTS idx_backups_entity ON backups(entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_backups_org ON backups(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_backups_expires ON backups(expires_at);
 
--- Audit logs indexes (4 indexes)
+-- Audit logs indexes (for `audit_logs` table)
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_logs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action, entity_type);
 
--- Auth logs indexes (3 indexes)
+-- Auth logs indexes (for `auth_logs` table)
 CREATE INDEX IF NOT EXISTS idx_auth_logs_user ON auth_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_logs_action ON auth_logs(action);
 CREATE INDEX IF NOT EXISTS idx_auth_logs_created ON auth_logs(created_at DESC);
 
--- Sessions indexes (1 index)
+-- Sessions indexes
 CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired);
 
--- Collaborators indexes (2 indexes)
+-- Collaborators indexes
 CREATE INDEX IF NOT EXISTS idx_collaborators_estimate ON estimate_collaborators(estimate_id);
 CREATE INDEX IF NOT EXISTS idx_collaborators_user ON estimate_collaborators(user_id);
 
 -- ============================================================================
--- Views (7 views)
+-- Views
 -- ============================================================================
 
 -- View for active (non-deleted) estimates
@@ -363,10 +342,9 @@ CREATE VIEW IF NOT EXISTS active_organizations AS
 SELECT * FROM organizations WHERE deleted_at IS NULL AND is_active = 1;
 
 -- ============================================================================
--- Triggers (5 triggers)
+-- Triggers for automatic updated_at timestamps
 -- ============================================================================
 
--- Trigger for automatic updated_at timestamp on estimates
 CREATE TRIGGER IF NOT EXISTS trigger_estimates_updated_at
 AFTER UPDATE ON estimates
 FOR EACH ROW
@@ -375,7 +353,6 @@ BEGIN
     UPDATE estimates SET updated_at = unixepoch() WHERE id = NEW.id;
 END;
 
--- Trigger for automatic updated_at timestamp on catalogs
 CREATE TRIGGER IF NOT EXISTS trigger_catalogs_updated_at
 AFTER UPDATE ON catalogs
 FOR EACH ROW
@@ -384,7 +361,6 @@ BEGIN
     UPDATE catalogs SET updated_at = unixepoch() WHERE id = NEW.id;
 END;
 
--- Trigger for automatic updated_at timestamp on organizations
 CREATE TRIGGER IF NOT EXISTS trigger_organizations_updated_at
 AFTER UPDATE ON organizations
 FOR EACH ROW
@@ -393,7 +369,6 @@ BEGIN
     UPDATE organizations SET updated_at = unixepoch() WHERE id = NEW.id;
 END;
 
--- Trigger for automatic updated_at timestamp on users
 CREATE TRIGGER IF NOT EXISTS trigger_users_updated_at
 AFTER UPDATE ON users
 FOR EACH ROW
@@ -402,7 +377,6 @@ BEGIN
     UPDATE users SET updated_at = unixepoch() WHERE id = NEW.id;
 END;
 
--- Trigger for automatic updated_at timestamp on settings (with composite key handling)
 CREATE TRIGGER IF NOT EXISTS trigger_settings_updated_at
 AFTER UPDATE ON settings
 FOR EACH ROW
@@ -413,121 +387,67 @@ BEGIN
 END;
 
 -- ============================================================================
--- Initial Data (Production Credentials - Migration 010)
+-- Initial Data for Default Organization, Admin User, and Settings (from Migration 007)
+-- This section assumes a fresh database creation. For a migration run, this data
+-- would typically be inserted by the migration scripts themselves.
 -- ============================================================================
 
--- Insert production organization (magellania-org)
 INSERT OR IGNORE INTO organizations (
-    id, name, slug, owner_id, plan, subscription_status,
-    max_users, max_estimates, max_catalogs, storage_limit_mb,
-    api_rate_limit, current_users_count, current_estimates_count,
-    current_catalogs_count, current_storage_mb, is_active,
-    created_at, updated_at, settings
+    id, name, slug, plan, owner_id, max_users, max_estimates, max_catalogs,
+    storage_limit_mb, api_rate_limit, current_users_count, current_estimates_count,
+    current_catalogs_count, current_storage_mb, is_active, created_at, updated_at
 ) VALUES (
-    'magellania-org',
-    'Magellania',
-    'magellania',
-    'superadmin',
-    'enterprise',
-    'active',
-    100,
-    10000,
-    100,
-    10000,
-    10000,
-    0,
-    0,
-    0,
-    0.0,
-    1,
-    unixepoch(),
-    unixepoch(),
-    '{}'
+    'default-org', 'Default Organization', 'default', 'pro', 'admin-user-id',
+    100, 1000, 50, 5000, 10000, 0, 0, 0, 0, 1, unixepoch(), unixepoch()
 );
 
--- Insert superadmin user (production credentials)
 INSERT OR IGNORE INTO users (
-    id, email, username, password_hash, full_name,
-    organization_id, role, email_verified, is_active, is_admin,
-    created_at, updated_at
+    id, email, username, password_hash, full_name, role, organization_id,
+    is_active, email_verified, created_at, updated_at
 ) VALUES (
-    'superadmin',
-    'admin@magellania.com',
-    'superadmin',
-    '$2b$10$za1xZO2ANym7dXfLAEupjeTaSjO6cESoLR2S3yj.Oe.FTzqK65Bjq',
-    'Super Administrator',
-    'magellania-org',
-    'admin',
-    1,
-    1,
-    1,
-    unixepoch(),
-    unixepoch()
+    'admin-user-id', 'admin@localhost', 'admin',
+    '$2b$10$amUBhN8kJvF84MZ.e4hwo.Ji5/anVfj0u8xqVJuSuNhdiOZ6EMKfe', -- Hash for 'admin123'
+    'Administrator', 'admin', 'default-org', 1, 1, unixepoch(), unixepoch()
 );
 
 -- App-level settings
 INSERT OR IGNORE INTO settings (scope, scope_id, key, value, value_type, created_at, updated_at)
 VALUES
     ('app', 'global', 'storage_type', '"sqlite"', 'string', unixepoch(), unixepoch()),
-    ('app', 'global', 'db_version', '"3.0.0"', 'string', unixepoch(), unixepoch()),
+    ('app', 'global', 'db_version', '"1.0.0"', 'string', unixepoch(), unixepoch()),
     ('app', 'global', 'maintenance_mode', 'false', 'boolean', unixepoch(), unixepoch());
 
--- Organization-level settings (magellania-org)
+-- Organization-level settings (default values)
 INSERT OR IGNORE INTO settings (scope, scope_id, key, value, value_type, created_at, updated_at)
 VALUES
-    ('organization', 'magellania-org', 'currency', '"$"', 'string', unixepoch(), unixepoch()),
-    ('organization', 'magellania-org', 'default_tax_rate', '0', 'number', unixepoch(), unixepoch()),
-    ('organization', 'magellania-org', 'default_hidden_markup', '10', 'number', unixepoch(), unixepoch()),
-    ('organization', 'magellania-org', 'booking_terms', '""', 'string', unixepoch(), unixepoch());
+    ('organization', 'default-org', 'currency', '"$"', 'string', unixepoch(), unixepoch()),
+    ('organization', 'default-org', 'default_tax_rate', '0', 'number', unixepoch(), unixepoch()),
+    ('organization', 'default-org', 'default_hidden_markup', '10', 'number', unixepoch(), unixepoch()),
+    ('organization', 'default-org', 'booking_terms', '""', 'string', unixepoch(), unixepoch());
 
--- User-level settings (for superadmin)
+-- User-level settings (for admin)
 INSERT OR IGNORE INTO settings (scope, scope_id, key, value, value_type, created_at, updated_at)
 VALUES
-    ('user', 'superadmin', 'theme', '"light"', 'string', unixepoch(), unixepoch()),
-    ('user', 'superadmin', 'language', '"ru"', 'string', unixepoch(), unixepoch()),
-    ('user', 'superadmin', 'default_pax_count', '27', 'number', unixepoch(), unixepoch()),
-    ('user', 'superadmin', 'autosave_interval_sec', '8', 'number', unixepoch(), unixepoch());
+    ('user', 'admin-user-id', 'theme', '"light"', 'string', unixepoch(), unixepoch()),
+    ('user', 'admin-user-id', 'language', '"ru"', 'string', unixepoch(), unixepoch()),
+    ('user', 'admin-user-id', 'default_pax_count', '27', 'number', unixepoch(), unixepoch()),
+    ('user', 'admin-user-id', 'autosave_interval_sec', '8', 'number', unixepoch(), unixepoch());
 
--- Schema version marker (prevents migration re-runs)
-INSERT OR IGNORE INTO schema_migrations (version, name, applied_at, execution_time_ms)
-VALUES ('SCHEMA_V3.0', 'complete_schema_from_working_db', unixepoch(), 0);
-
--- Audit log for schema initialization
+-- Audit log for migration 007
 INSERT OR IGNORE INTO audit_logs (entity_type, entity_id, action, user_id, organization_id, metadata, created_at)
 VALUES (
-    'system',
-    'schema-v3.0',
-    'schema_initialization',
-    'superadmin',
-    'magellania-org',
-    '{"schema_version": "3.0.0", "description": "Complete schema from working production database", "replaces_migrations": "006-010", "created_at": "2025-11-28"}',
+    'system', 'migration-007', 'migration', 'admin-user-id', 'default-org',
+    '{"migration": "007", "description": "Migrated existing data to multi-tenant structure", "estimates_migrated": 0, "catalogs_migrated": 0}',
     unixepoch()
 );
 
 -- ============================================================================
--- PRAGMA optimizations (applied after schema creation)
+-- PRAGMA optimizations
 -- ============================================================================
 
-COMMIT;
-
--- Re-enable foreign keys after transaction
 PRAGMA foreign_keys = ON;
-
--- Write-Ahead Logging for better concurrency and crash recovery
 PRAGMA journal_mode = WAL;
-
--- Checkpoint WAL automatically every 1000 pages
 PRAGMA wal_autocheckpoint = 1000;
-
--- Balance between safety and performance
 PRAGMA synchronous = NORMAL;
-
--- 10MB memory cache for better performance
 PRAGMA cache_size = -10000;
-
--- Use memory for temporary tables
 PRAGMA temp_store = MEMORY;
-
--- ============================================================
--- END OF SCHEMA
--- ============================================================
