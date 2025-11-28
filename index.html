@@ -2795,6 +2795,26 @@
     </div>
 
     <script>
+        // Глобальная защита от ошибок браузерных расширений (LastPass, Grammarly и т.д.)
+        window.addEventListener('error', function(event) {
+            // Игнорировать ошибки из content_script расширений браузера
+            if (event.filename && event.filename.includes('content_script')) {
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+            }
+            // Игнорировать ошибки расширений с типичными признаками
+            if (event.message && (
+                event.message.includes('ControlLooksLikePasswordCredentialField') ||
+                event.message.includes('chrome-extension://') ||
+                event.message.includes('moz-extension://')
+            )) {
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+            }
+        }, true);
+
         class ProfessionalQuoteCalculator {
             constructor() {
                 // Version control constants
@@ -3339,8 +3359,8 @@
                 };
 
                 try {
-                    // Транзакционное сохранение (атомарное сохранение estimate + backup)
-                    await apiClient.saveTransactional(initialData, filename);
+                    // ID-First: сохранение по ID
+                    await apiClient.saveEstimate(initialData.id, initialData);
                     this.showNotification('Создана новая смета: ' + filename, false);
                 } catch (err) {
                     console.error('Error creating new quote:', err);
@@ -3352,82 +3372,75 @@
              * Восстанавливает последнюю рабочую смету после перезагрузки страницы
              * Проверяет последний изменённый backup (не старше 5 минут)
              */
-            async restoreLastWorkingQuote() {
+            async restoreLastWorkingEstimate() {
                 try {
-                    // Получаем список backup'ов
-                    const backups = await apiClient.getBackupsList();
+                    // 1. Попытка восстановить конкретную смету из localStorage
+                    const lastId = localStorage.getItem('lastOpenedEstimateId');
 
-                    if (backups.length === 0) {
-                        console.log('No backups found for restoration');
-                        return false;
+                    if (lastId) {
+                        try {
+                            console.log('[Restore] Attempting to restore estimate:', lastId);
+
+                            // Загрузить смету по ID
+                            const estimateData = await apiClient.getEstimate(lastId);
+
+                            // Применяем данные к состоянию
+                            this.state.currentQuoteId = estimateData.id;
+                            this.state.clientName = estimateData.clientName || '';
+                            this.state.clientPhone = estimateData.clientPhone || '';
+                            this.state.clientEmail = estimateData.clientEmail || '';
+                            this.state.paxCount = estimateData.paxCount || 0;
+                            this.state.tourStart = estimateData.tourStart || '';
+                            this.state.tourEnd = estimateData.tourEnd || '';
+                            this.state.hiddenMarkup = estimateData.hiddenMarkup || 0;
+                            this.state.taxRate = estimateData.taxRate || 0;
+                            this.state.programDescription = estimateData.programDescription || '';
+                            this.state.quoteComments = estimateData.quoteComments || '';
+                            this.state.services = estimateData.services || [];
+                            this.state.hotels = estimateData.hotels || [];
+                            this.state.flights = estimateData.flights || [];
+                            this.state.otherServices = estimateData.otherServices || [];
+
+                            // Генерируем имя файла
+                            const filename = this.generateFilenameWithId({
+                                id: estimateData.id,
+                                clientName: estimateData.clientName,
+                                tourStart: estimateData.tourStart,
+                                paxCount: estimateData.paxCount
+                            });
+
+                            this.state.currentQuoteFile = filename;
+                            this.state.isQuoteSaved = true;
+
+                            // Обновляем UI
+                            this.loadStateToUI();
+                            this.renderServices();
+                            this.renderHotels();
+                            this.renderFlights();
+                            this.renderOtherServices();
+                            this.updateCalculations();
+                            this.updateQuoteStatusBar();
+
+                            // Показываем уведомление
+                            const clientName = estimateData.clientName || 'Без имени';
+                            this.showNotification(`Восстановлена смета: ${clientName}`, false);
+
+                            console.log('[Restore] Successfully restored estimate:', lastId);
+                            return true;
+
+                        } catch (err) {
+                            console.warn('[Restore] Last estimate not found, clearing localStorage:', err);
+                            localStorage.removeItem('lastOpenedEstimateId');
+                            // Продолжаем к fallback
+                        }
                     }
 
-                    // Backups уже отсортированы по дате (новые первые) на сервере
-                    const lastBackup = backups[0];
-
-                    // Проверяем возраст backup (не старше 5 минут)
-                    const ageMinutes = (Date.now() - new Date(lastBackup.updatedAt)) / 60000;
-
-                    if (ageMinutes > 5) {
-                        console.log('Last backup is too old:', ageMinutes, 'minutes');
-                        return false;
-                    }
-
-                    // Проверяем есть ли соответствующий файл сметы
-                    if (!lastBackup.hasEstimate) {
-                        console.log('Backup has no corresponding estimate file');
-                        return false;
-                    }
-
-                    // Загружаем данные из backup
-                    const backupData = await apiClient.loadBackup(lastBackup.id);
-
-                    // Применяем данные к состоянию
-                    this.state.currentQuoteId = backupData.id;
-                    this.state.clientName = backupData.clientName || '';
-                    this.state.clientPhone = backupData.clientPhone || '';
-                    this.state.clientEmail = backupData.clientEmail || '';
-                    this.state.paxCount = backupData.paxCount || 0;
-                    this.state.tourStart = backupData.tourStart || '';
-                    this.state.tourEnd = backupData.tourEnd || '';
-                    this.state.hiddenMarkup = backupData.hiddenMarkup || 0;
-                    this.state.taxRate = backupData.taxRate || 0;
-                    this.state.programDescription = backupData.programDescription || '';
-                    this.state.quoteComments = backupData.quoteComments || '';
-                    this.state.services = backupData.services || [];
-                    this.state.hotels = backupData.hotels || [];
-                    this.state.flights = backupData.flights || [];
-                    this.state.otherServices = backupData.otherServices || [];
-
-                    // Генерируем имя файла
-                    const filename = this.generateFilenameWithId({
-                        id: backupData.id,
-                        clientName: backupData.clientName,
-                        tourStart: backupData.tourStart,
-                        paxCount: backupData.paxCount
-                    });
-
-                    this.state.currentQuoteFile = filename;
-                    this.state.isQuoteSaved = true;
-
-                    // Обновляем UI
-                    this.loadStateToUI();
-                    this.renderServices();
-                    this.renderHotels();
-                    this.renderFlights();
-                    this.renderOtherServices();
-                    this.updateCalculations();
-                    this.updateQuoteStatusBar();
-
-                    // Показываем уведомление
-                    const clientName = backupData.clientName || 'Без имени';
-                    this.showNotification(`Восстановлена смета: ${clientName}`, false);
-
-                    console.log('Successfully restored quote from backup:', lastBackup.id);
-                    return true;
+                    // 2. Fallback: пустое состояние (новая смета)
+                    console.log('[Restore] No last estimate found, starting with empty state');
+                    return false;
 
                 } catch (err) {
-                    console.error('Error restoring last working quote:', err);
+                    console.error('[Restore] Error restoring estimate:', err);
                     return false;
                 }
             }
@@ -3464,8 +3477,8 @@
                 this.initNewSectionsEvents(); // Инициализация событий новых секций
 
                 // Восстанавливаем последнюю рабочую смету после перезагрузки
-                this.restoreLastWorkingQuote().catch(err => {
-                    console.error('Error restoring last working quote:', err);
+                this.restoreLastWorkingEstimate().catch(err => {
+                    console.error('Error restoring last working estimate:', err);
                 });
 
                 // Восстанавливаем последний активный режим (смета/чеклист)
@@ -3724,7 +3737,14 @@
                 doneCheckbox.addEventListener('change', () => {
                     service.done = doneCheckbox.checked;
                     this.saveToLocalStorage();
-                    this.renderChecklist();
+                    // Обновить стили карточки без полной перерисовки
+                    card.style.background = service.done ? '#ecfdf5' : 'white';
+                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
+                    // Синхронизировать с конструктором смет
+                    this.renderServices();
+                    this.renderHotels();
+                    this.renderFlights();
+                    this.renderOtherServices();
                 });
 
                 const doneLabel = document.createElement('div');
@@ -3745,7 +3765,14 @@
                 paidCheckbox.addEventListener('change', () => {
                     service.paid = paidCheckbox.checked;
                     this.saveToLocalStorage();
-                    this.renderChecklist();
+                    // Обновить стили карточки без полной перерисовки
+                    card.style.background = service.done ? '#ecfdf5' : 'white';
+                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
+                    // Синхронизировать с конструктором смет
+                    this.renderServices();
+                    this.renderHotels();
+                    this.renderFlights();
+                    this.renderOtherServices();
                 });
 
                 const paidLabel = document.createElement('div');
@@ -3766,7 +3793,14 @@
                 prepaymentCheckbox.addEventListener('change', () => {
                     service.prepaymentReceived = prepaymentCheckbox.checked;
                     this.saveToLocalStorage();
-                    this.renderChecklist();
+                    // Обновить стили карточки без полной перерисовки
+                    card.style.background = service.done ? '#ecfdf5' : 'white';
+                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
+                    // Синхронизировать с конструктором смет
+                    this.renderServices();
+                    this.renderHotels();
+                    this.renderFlights();
+                    this.renderOtherServices();
                 });
 
                 const prepaymentLabel = document.createElement('div');
@@ -5105,6 +5139,14 @@
                         }
                     });
                 }
+
+                // ✅ Event handler для кнопки "История версий" (Этап 4.3)
+                const restoreBackupBtn = document.getElementById('restore-from-backup-btn');
+                if (restoreBackupBtn) {
+                    restoreBackupBtn.addEventListener('click', () => {
+                        this.showBackupsList();
+                    });
+                }
             }
 
             renderTemplates() {
@@ -5199,7 +5241,7 @@
                 // Автоматическая сортировка по категориям
                 const category = template.category || '';
 
-                if (category.toLowerCase().includes('отел') || category.toLowerCase().includes('hotel') || category.toLowerCase().includes('гостиниц')) {
+                if (category === 'accommodation' || category.toLowerCase().includes('отел') || category.toLowerCase().includes('hotel') || category.toLowerCase().includes('гостиниц')) {
                     // Добавляем в отели
                     this.state.hotels.unshift(service);
                     this.renderHotels();
@@ -6915,7 +6957,7 @@
                 // Создать копию с новым ID и пометкой "(копия)"
                 const duplicatedTemplate = {
                     ...template,
-                    id: this.generateId(),
+                    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                     name: template.name + ' (копия)'
                 };
 
@@ -10535,6 +10577,12 @@
 
             // Migration v3: Delegate to server-based save (was localStorage)
             saveToLocalStorage() {
+                // ✅ GUARD FLAG: Блокируем autosave во время загрузки сметы
+                if (this.isLoadingQuote) {
+                    console.log('[Autosave] Skipped - loading in progress');
+                    return;
+                }
+
                 // ✅ DEBOUNCE: Очищаем предыдущий таймер автосохранения
                 if (this.timeoutIds.autosave) {
                     clearTimeout(this.timeoutIds.autosave);
@@ -12271,13 +12319,19 @@
                         }
                     }
 
-                    // Транзакционное сохранение (атомарное сохранение estimate + backup)
-                    await apiClient.saveTransactional(quoteData, newFilename);
+                    // Простое сохранение в estimates таблицу (по ID, не по filename)
+                    await apiClient.saveEstimate(this.state.currentQuoteId, quoteData);
 
                     apiClient.setCurrentFilename(newFilename);
                     this.state.currentQuoteFile = newFilename;
                     this.state.isQuoteSaved = true;
                     this.updateQuoteStatusBar();
+
+                    // ✅ Сохраняем ID последней открытой/созданной сметы для восстановления
+                    if (this.state.currentQuoteId) {
+                        localStorage.setItem('lastOpenedEstimateId', this.state.currentQuoteId);
+                        console.log('[Tracking] Estimate saved, ID tracked:', this.state.currentQuoteId);
+                    }
 
                     // Показываем уведомление только если запрошено (при явных действиях пользователя)
                     if (showNotification) {
@@ -12357,8 +12411,8 @@
                     quoteComments: this.state.quoteComments
                 };
 
-                // Автосохраняем в текущий файл сметы с транзакцией (тихое сохранение, без уведомлений)
-                apiClient.scheduleTransactionalAutosave(quoteData, this.state.currentQuoteFile);
+                // Автосохраняем в текущий файл сметы (тихое сохранение, без уведомлений)
+                apiClient.scheduleAutosave(quoteData, this.state.currentQuoteFile);
             };
 
             // Загрузка сметы с сервера
@@ -12435,6 +12489,12 @@
 
                         // Включаем автосохранение обратно
                         this.isLoadingQuote = false;
+
+                        // ✅ Сохраняем ID последней открытой сметы для восстановления при перезагрузке
+                        if (data.id) {
+                            localStorage.setItem('lastOpenedEstimateId', data.id);
+                            console.log('[Tracking] Last opened estimate ID saved:', data.id);
+                        }
 
                         // Обновляем статус-бар с именем файла
                         this.state.isQuoteSaved = true;
@@ -12737,52 +12797,6 @@
             }
         };
 
-        // Функция показа списка backups
-        window.showBackupsList = async function() {
-            try {
-                const backups = await apiClient.getBackupsList();
-                const listContainer = document.getElementById('backups-list');
-
-                // Фильтруем только backups без соответствующих файлов смет
-                const orphanBackups = backups.filter(b => !b.hasEstimate);
-
-                if (orphanBackups.length === 0) {
-                    listContainer.innerHTML = '<p style="text-align: center; color: var(--gray-500);">Нет автосохранений без файлов смет</p>';
-                } else {
-                    listContainer.innerHTML = orphanBackups.map(backup => `
-                        <div style="border: 1px solid var(--gray-200); border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; margin-bottom: 4px;">${backup.clientName || 'Без имени'}</div>
-                                <div style="font-size: 12px; color: var(--gray-600);">
-                                    ${backup.tourStart || 'Дата не указана'} • ${backup.paxCount || 0} чел. • ${new Date(backup.updatedAt).toLocaleString('ru-RU')}
-                                </div>
-                            </div>
-                            <button onclick="restoreBackup('${backup.id}')" style="padding: 8px 16px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                Восстановить
-                            </button>
-                        </div>
-                    `).join('');
-                }
-            } catch (err) {
-                console.error('Error loading backups list:', err);
-                window.QuoteCalc.showNotification('Ошибка загрузки списка автосохранений: ' + err.message, true);
-            }
-        };
-
-        // Функция восстановления из backup
-        window.restoreBackup = async function(id) {
-            try {
-                const result = await apiClient.restoreFromBackup(id);
-                document.getElementById('estimates-modal').style.display = 'none';
-                // Загружаем восстановленную смету
-                await window.QuoteCalc.loadQuoteFromServer(result.filename);
-                window.QuoteCalc.showNotification('Смета восстановлена из автосохранения', false);
-            } catch (err) {
-                console.error('Error restoring backup:', err);
-                window.QuoteCalc.showNotification('Ошибка восстановления: ' + err.message, true);
-            }
-        };
-
         // Функция импорта файла
         window.importQuoteFile = async function(file) {
             try {
@@ -12838,12 +12852,12 @@
                         // Генерируем имя файла
                         const filename = window.QuoteCalc.generateFilenameWithId(data);
 
-                        // Транзакционное сохранение (атомарное сохранение estimate + backup)
-                        await apiClient.saveTransactional(data, filename);
+                        // ID-First: сохранение по ID
+                        await apiClient.saveEstimate(data.id, data);
 
                         // Закрываем модальное окно и загружаем импортированную смету
                         document.getElementById('estimates-modal').style.display = 'none';
-                        await window.QuoteCalc.loadQuoteFromServer(filename);
+                        await window.QuoteCalc.loadQuoteFromServer(data.id);
                         window.QuoteCalc.showNotification('Смета импортирована: ' + filename, false);
                     } catch (err) {
                         console.error('Error parsing JSON:', err);

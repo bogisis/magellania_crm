@@ -199,16 +199,14 @@ class StorageAdapter {
 
     /**
      * Получить статистику хранилища
-     * @returns {Promise<Object>} { estimatesCount, backupsCount, catalogsCount, storageSize }
+     * @returns {Promise<Object>} { estimatesCount, catalogsCount, storageSize }
      */
     async getStats() {
         const estimates = await this.getEstimatesList();
-        const backups = await this.getBackupsList();
         const catalogs = await this.getCatalogsList();
 
         return {
             estimatesCount: estimates.length,
-            backupsCount: backups.length,
             catalogsCount: catalogs.length,
             storageType: this.constructor.name
         };

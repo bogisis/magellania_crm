@@ -175,32 +175,6 @@ class SQLiteStorage extends StorageAdapter {
         `);
 
         // ========================================================================
-        // Backups - Multi-Tenant
-        // ========================================================================
-
-        this.statements.insertBackup = this.db.prepare(`
-            INSERT INTO backups (entity_type, entity_id, data, data_version, data_hash, backup_type, created_at, created_by, organization_id)
-            VALUES ('estimate', ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        this.statements.getBackup = this.db.prepare(`
-            SELECT * FROM backups
-            WHERE entity_type = 'estimate' AND entity_id = ? AND organization_id = ?
-            ORDER BY id DESC LIMIT 1
-        `);
-
-        this.statements.listBackups = this.db.prepare(`
-            SELECT b.id, b.entity_id as estimate_id, b.created_at,
-                   e.filename, e.client_name, e.pax_count, e.tour_start
-            FROM backups b
-            LEFT JOIN estimates e ON b.entity_id = e.id AND b.entity_type = 'estimate'
-            WHERE b.organization_id = ? AND b.entity_type = 'estimate'
-            GROUP BY b.entity_id
-            HAVING b.created_at = MAX(b.created_at)
-            ORDER BY b.created_at DESC
-        `);
-
-        // ========================================================================
         // Catalogs - Multi-Tenant + Visibility
         // ========================================================================
 
@@ -493,101 +467,6 @@ class SQLiteStorage extends StorageAdapter {
     }
 
     // ========================================================================
-    // Backups (Резервные копии) - Multi-Tenant
-    // ========================================================================
-
-    /**
-     * Получить список бэкапов организации
-     * @param {string} organizationId - ID организации (опционально)
-     */
-    async getBackupsList(organizationId = null) {
-        await this.init();
-
-        const orgId = organizationId || this.defaultOrganizationId;
-        const rows = this.statements.listBackups.all(orgId);
-
-        return rows.map(row => ({
-            id: row.estimate_id,
-            clientName: row.client_name || 'Без имени',
-            paxCount: row.pax_count || 0,
-            tourStart: row.tour_start || '',
-            updatedAt: new Date(row.created_at * 1000),
-            hasEstimate: !!row.filename
-        }));
-    }
-
-    /**
-     * Загрузить бэкап по estimate_id
-     * @param {string} estimateId - ID сметы (для которой бэкап)
-     * @param {string} organizationId - ID организации (опционально)
-     */
-    async loadBackup(estimateId, organizationId = null) {
-        await this.init();
-
-        const orgId = organizationId || this.defaultOrganizationId;
-        const row = this.statements.getBackup.get(estimateId, orgId);
-
-        if (!row) {
-            throw new Error(`Backup not found: ${estimateId}`);
-        }
-
-        return JSON.parse(row.data);
-    }
-
-    /**
-     * Сохранить бэкап - Multi-Tenant
-     * @param {string} estimateId - ID сметы (для которой бэкап)
-     * @param {object} data - Данные бэкапа
-     * @param {string} userId - ID пользователя (опционально)
-     * @param {string} organizationId - ID организации (опционально)
-     */
-    async saveBackup(estimateId, data, userId = null, organizationId = null) {
-        await this.init();
-
-        const now = Math.floor(Date.now() / 1000);
-        const dataStr = JSON.stringify(data);
-        const dataHash = this._calculateHash(dataStr);
-
-        const createdBy = userId || this.defaultUserId;
-        const orgId = organizationId || this.defaultOrganizationId;
-
-        // New schema: (entity_type, entity_id, data, data_version, data_hash, backup_type, created_at, created_by, organization_id)
-        this.statements.insertBackup.run(
-            estimateId,     // entity_id
-            dataStr,        // data
-            1,              // data_version (default for backups)
-            dataHash,       // data_hash
-            'auto',         // backup_type
-            now,            // created_at
-            createdBy,      // created_by
-            orgId           // organization_id
-        );
-
-        return { success: true };
-    }
-
-    /**
-     * Восстановить из бэкапа - ID-First
-     * @param {string} estimateId - ID сметы
-     * @param {string} userId - ID пользователя (опционально)
-     * @param {string} organizationId - ID организации (опционально)
-     */
-    async restoreFromBackup(estimateId, userId = null, organizationId = null) {
-        await this.init();
-
-        const orgId = organizationId || this.defaultOrganizationId;
-        const backupData = await this.loadBackup(estimateId, orgId);
-
-        // ID-First: используем estimateId из бэкапа
-        const id = backupData.id || estimateId;
-
-        // Сохраняем как новую смету (или перезаписываем существующую)
-        await this.saveEstimate(id, backupData, userId, orgId);
-
-        return { success: true, id };
-    }
-
-    // ========================================================================
     // Catalogs (Каталоги услуг) - Multi-Tenant + Visibility
     // ========================================================================
 
@@ -754,113 +633,6 @@ class SQLiteStorage extends StorageAdapter {
     }
 
     // ========================================================================
-    // Transactions (Транзакции)
-    // ========================================================================
-
-    /**
-     * Транзакционное сохранение сметы + backup (атомарно) - ID-First + Multi-Tenant
-     * Это главное преимущество SQLite над FileStorage
-     *
-     * @param {string} id - ID сметы (обязательно для ID-First)
-     * @param {object} data - Данные сметы
-     * @param {string} userId - ID пользователя (опционально)
-     * @param {string} organizationId - ID организации (опционально)
-     */
-    async saveEstimateTransactional(id, data, userId = null, organizationId = null) {
-        await this.init();
-
-        // Валидация входных данных
-        if (!data || typeof data !== 'object') {
-            throw new Error(`Invalid data for transactional save: ${id}`);
-        }
-
-        if (!id || typeof id !== 'string' || !id.trim()) {
-            throw new Error('Invalid id: must be a non-empty string');
-        }
-
-        const ownerId = userId || this.defaultUserId;
-        const orgId = organizationId || this.defaultOrganizationId;
-
-        // Транзакция - синхронная операция для better-sqlite3
-        const transaction = this.db.transaction(() => {
-            // Используем синхронные версии методов внутри транзакции
-            const now = Math.floor(Date.now() / 1000);
-            const dataStr = JSON.stringify(data);
-            const dataHash = this._calculateHash(dataStr);
-            const metadata = this._extractMetadata(data);
-
-            // Filename извлекаем из данных или генерируем
-            const filename = data.filename || metadata.filename || `estimate_${id}.json`;
-
-            // ID-First: проверяем существование только по ID
-            const existing = this.statements.getEstimateById.get(id, orgId);
-
-            if (existing) {
-                // UPDATE с optimistic locking
-                this.statements.updateEstimate.run(
-                    filename,
-                    dataStr,
-                    metadata.clientName,
-                    metadata.clientEmail,
-                    metadata.clientPhone,
-                    metadata.paxCount,
-                    metadata.tourStart,
-                    metadata.tourEnd,
-                    metadata.totalCost,
-                    metadata.totalProfit,
-                    metadata.servicesCount,
-                    dataHash,
-                    now,
-                    id,                         // WHERE id = ?
-                    existing.data_version,      // AND data_version = ?
-                    orgId                       // AND organization_id = ?
-                );
-            } else {
-                // INSERT новой сметы
-                this.statements.insertEstimate.run(
-                    id,
-                    filename,
-                    data.version || '1.1.0',
-                    this.appVersion,
-                    dataStr,
-                    metadata.clientName,
-                    metadata.clientEmail,
-                    metadata.clientPhone,
-                    metadata.paxCount,
-                    metadata.tourStart,
-                    metadata.tourEnd,
-                    metadata.totalCost,
-                    metadata.totalProfit,
-                    metadata.servicesCount,
-                    1,              // initial data_version
-                    dataHash,
-                    now,            // created_at
-                    now,            // updated_at
-                    ownerId,        // owner_id
-                    orgId           // organization_id
-                );
-            }
-
-            // Сохранить backup
-            this.statements.insertBackup.run(
-                id,             // estimate_id (entity_id)
-                dataStr,        // data
-                existing ? existing.data_version + 1 : 1,  // data_version
-                dataHash,       // data_hash
-                'auto',         // backup_type
-                now,            // created_at
-                ownerId,        // created_by
-                orgId           // organization_id
-            );
-        });
-
-        // Выполнить транзакцию (atomic)
-        transaction();
-
-        return { success: true, id };
-    }
-
-    // ========================================================================
     // Utilities (Вспомогательные методы)
     // ========================================================================
 
@@ -878,7 +650,7 @@ class SQLiteStorage extends StorageAdapter {
         const transliterated = clientName
             ? transliterate(clientName.trim().toLowerCase()).replace(/\s+/g, '_')
             : 'untitled';
-        const filename = `${transliterated}_${tourStart}_${paxCount}pax_${id}.json`;
+        const filename = `${transliterated}_${tourStart}_${paxCount}pax_${id}`;
 
         return {
             clientName,

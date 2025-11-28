@@ -111,6 +111,22 @@ class APIClient {
         return result.estimates;
     }
 
+    async getEstimate(id) {
+        // ID-First архитектура: загрузка сметы по UUID
+        const response = await fetch(`${this.baseURL}/api/estimates/${id}`);
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Estimate not found');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        return result.data;
+    }
+
     async loadEstimate(filename) {
         const response = await fetch(`${this.baseURL}/api/estimates/${filename}`);
         const result = await response.json();
@@ -194,47 +210,12 @@ class APIClient {
         return result;
     }
 
-    // ============ Backup ============
-
-    async getBackupsList() {
-        const response = await fetch(`${this.baseURL}/api/backups`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result.backups;
-    }
-
-    async loadBackup(id) {
-        const response = await fetch(`${this.baseURL}/api/backups/${id}`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result.data;
-    }
-
-    async saveBackup(data, id) {
-        const response = await fetch(`${this.baseURL}/api/backups/${id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result;
-    }
-
-    async restoreFromBackup(id) {
-        const response = await fetch(`${this.baseURL}/api/backups/${id}/restore`, {
-            method: 'POST'
-        });
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-        return result;
-    }
-
-    // Автосохранение с debounce
-    // НОВАЯ ЛОГИКА: сохраняем в файл сметы И в backup по ID
+    // Автосохранение с debounce (8 секунд)
+    // Сохраняет смету в базу данных (estimates таблица)
+    // ID-First: используем ID сметы как ключ, не filename
     scheduleAutosave(data, filename) {
-        if (!filename || !data.id) {
-            return; // Не автосохраняем несохраненные сметы
+        if (!data.id) {
+            return; // Не автосохраняем несохраненные сметы (ID обязателен)
         }
 
         if (this.autosaveTimeout) {
@@ -243,198 +224,14 @@ class APIClient {
 
         this.autosaveTimeout = setTimeout(async () => {
             try {
-                // Сохраняем в текущий файл
-                await this.saveEstimate(data, filename);
-                // Сохраняем в backup по ID
-                await this.saveBackup(data, data.id);
+                // ID-First: сохраняем по ID, не по filename
+                await this.saveEstimate(data.id, data);
                 // Автосохранение тихое - не логируем
             } catch (err) {
                 // Только критичные ошибки логируем
                 console.error('Autosave failed:', err);
             }
         }, 8000); // 8 секунд - оптимальный баланс между безопасностью данных и нагрузкой на сервер
-    }
-
-    // ============ Транзакционное сохранение ============
-
-    /**
-     * Генерация уникального ID для транзакции
-     */
-    generateTransactionId() {
-        return 'xxxxxxxxxxxx'.replace(/x/g, () => {
-            return (Math.random() * 16 | 0).toString(16);
-        });
-    }
-
-    /**
-     * Подготовка транзакции - сохранение во временные файлы
-     */
-    async prepareTransaction(data, filename) {
-        const transactionId = this.generateTransactionId();
-
-        const response = await fetch(`${this.baseURL}/api/transaction/prepare`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                transactionId,
-                estimate: {
-                    filename: filename,
-                    data: data
-                },
-                backup: {
-                    id: data.id,
-                    data: data
-                }
-            })
-        });
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        return {
-            transactionId,
-            filename,
-            backupId: data.id
-        };
-    }
-
-    /**
-     * Commit транзакции - atomic rename временных файлов в финальные
-     */
-    async commitTransaction(transactionId, filename, backupId, data) {
-        const response = await fetch(`${this.baseURL}/api/transaction/commit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                transactionId,
-                estimateFilename: filename,
-                backupId: backupId,
-                data: data  // ✅ ДОБАВЛЕНО: передаем данные
-            })
-        });
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        return result;
-    }
-
-    /**
-     * Rollback транзакции - удаление временных файлов
-     */
-    async rollbackTransaction(transactionId, filename, backupId) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/transaction/rollback`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    transactionId,
-                    estimateFilename: filename,
-                    backupId: backupId
-                })
-            });
-
-            const result = await response.json();
-            // Не бросаем ошибку если rollback не удался - это не критично
-            if (!result.success) {
-                console.warn('Rollback warning:', result.error);
-            }
-
-            return result;
-        } catch (err) {
-            // Rollback не критичен - логируем и продолжаем
-            console.warn('Rollback failed:', err.message);
-            return { success: false, error: err.message };
-        }
-    }
-
-    /**
-     * Транзакционное сохранение с rollback при ошибках
-     * Это главный метод который нужно использовать вместо двойного save
-     *
-     * @param {Object} data - данные сметы
-     * @param {string} filename - имя файла
-     * @returns {Promise<Object>} - результат сохранения
-     */
-    async saveTransactional(data, filename) {
-        if (!filename) {
-            // Генерация имени файла из данных клиента
-            const clientName = data.clientName || 'Unnamed';
-            const date = new Date().toISOString().split('T')[0];
-            filename = `${clientName}_${date}.json`.replace(/[^a-zA-Z0-9_.-]/g, '_');
-        }
-
-        let transaction = null;
-
-        try {
-            // Step 1: Prepare - сохранить во временные файлы
-            transaction = await this.prepareTransaction(data, filename);
-
-            // Step 2: Commit - atomic rename в финальные файлы
-            const result = await this.commitTransaction(
-                transaction.transactionId,
-                transaction.filename,
-                transaction.backupId,
-                data  // ✅ ДОБАВЛЕНО: передаем данные
-            );
-
-            // Успех - обновляем текущее имя файла
-            this.currentEstimateFilename = filename;
-
-            return {
-                success: true,
-                filename: filename,
-                message: 'Saved successfully with transaction'
-            };
-
-        } catch (err) {
-            // Step 3: Rollback при любой ошибке
-            if (transaction) {
-                await this.rollbackTransaction(
-                    transaction.transactionId,
-                    transaction.filename,
-                    transaction.backupId
-                );
-            }
-
-            // Пробрасываем ошибку дальше
-            throw new Error(`Transaction failed: ${err.message}`);
-        }
-    }
-
-    /**
-     * Автосохранение с использованием транзакций
-     * Отложенное сохранение через 8 секунд
-     */
-    scheduleTransactionalAutosave(data, filename) {
-        // Отменяем предыдущий таймер
-        if (this.autosaveTimeout) {
-            clearTimeout(this.autosaveTimeout);
-        }
-
-        // Проверка наличия ID и filename
-        if (!filename || !data.id) {
-            console.warn('Autosave skipped: missing filename or id');
-            return;
-        }
-
-        this.autosaveTimeout = setTimeout(async () => {
-            try {
-                await this.saveTransactional(data, filename);
-                // Автосохранение тихое - не логируем успех
-            } catch (err) {
-                console.error('Transactional autosave failed:', err.message);
-                // При ошибке транзакционного автосохранения можно попробовать fallback
-                // на обычное сохранение (без транзакций)
-                try {
-                    console.log('Fallback to non-transactional save...');
-                    await this.saveEstimate(data, filename);
-                    await this.saveBackup(data, data.id);
-                } catch (fallbackErr) {
-                    console.error('Fallback save also failed:', fallbackErr.message);
-                }
-            }
-        }, 8000); // 8 секунд
     }
 
     // ============ Настройки ============

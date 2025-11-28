@@ -10,6 +10,7 @@
  * - POST /api/v1/estimates/:id/restore - Восстановить
  * - PUT /api/v1/estimates/:id/rename - Переименовать
  * - POST /api/v1/estimates/:id/share - Поделиться
+ * - POST /api/v1/estimates/:id/backup - Создать manual backup
  *
  * Created: 2025-11-19
  * Version: 3.0.0
@@ -552,6 +553,57 @@ router.post('/:id/share', requireAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to update sharing'
+        });
+    }
+});
+
+/**
+ * POST /api/v1/estimates/:id/backup
+ * Создать manual backup сметы
+ */
+router.post('/:id/backup', requireAuth, async (req, res) => {
+    try {
+        const storage = req.app.locals.storage;
+        const estimate = storage.db.prepare('SELECT * FROM estimates WHERE id = ?').get(req.params.id);
+
+        if (!estimate) {
+            return res.status(404).json({
+                success: false,
+                error: 'Estimate not found'
+            });
+        }
+
+        // Check access
+        const canBackup =
+            req.user.role === 'superuser' ||
+            estimate.owner_id === req.user.id ||
+            (req.user.role === 'admin' && estimate.organization_id === req.user.organization_id);
+
+        if (!canBackup) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied'
+            });
+        }
+
+        // Create manual backup
+        const result = await storage.createManualBackup(
+            req.params.id,
+            req.user.id,
+            req.user.organization_id
+        );
+
+        res.json({
+            success: true,
+            message: 'Backup created successfully',
+            backupVersion: result.backupVersion
+        });
+
+    } catch (err) {
+        console.error('Create backup error:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create backup'
         });
     }
 });
