@@ -12349,7 +12349,10 @@
                     // Если был старый файл с другим именем, переименовываем
                     if (this.state.currentQuoteFile && this.state.currentQuoteFile !== newFilename) {
                         try {
-                            await apiClient.renameEstimate(this.state.currentQuoteFile, newFilename);
+                            // ✅ FIX: Используем currentQuoteId (UUID), а не currentQuoteFile (filename)
+                            if (this.state.currentQuoteId) {
+                                await apiClient.renameEstimate(this.state.currentQuoteId, newFilename);
+                            }
                         } catch (renameErr) {
                             // Если файл не найден (например, старое имя из localStorage), просто игнорируем
                             console.warn('Could not rename file, will create new:', renameErr.message);
