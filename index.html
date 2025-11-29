@@ -3582,6 +3582,28 @@
                     }));
             }
 
+            // ✅ FIX: Helper для нахождения оригинального service в state
+            findServiceInState(serviceId, section) {
+                let array;
+                switch (section) {
+                    case 'service':
+                        array = this.state.services;
+                        break;
+                    case 'hotel':
+                        array = this.state.hotels;
+                        break;
+                    case 'flight':
+                        array = this.state.flights;
+                        break;
+                    case 'other':
+                        array = this.state.otherServices;
+                        break;
+                    default:
+                        return null;
+                }
+                return array.find(s => s.id === serviceId);
+            }
+
             passesChecklistFilter(service) {
                 const filter = this.state.checklistFilter;
 
@@ -3735,16 +3757,20 @@
                 doneCheckbox.checked = service.done;
                 doneCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
                 doneCheckbox.addEventListener('change', () => {
-                    service.done = doneCheckbox.checked;
-                    this.saveToLocalStorage();
-                    // Обновить стили карточки без полной перерисовки
-                    card.style.background = service.done ? '#ecfdf5' : 'white';
-                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
-                    // Синхронизировать с конструктором смет
-                    this.renderServices();
-                    this.renderHotels();
-                    this.renderFlights();
-                    this.renderOtherServices();
+                    // ✅ FIX: Находим оригинальный service в state по ID и секции
+                    const originalService = this.findServiceInState(service.id, service._section);
+                    if (originalService) {
+                        originalService.done = doneCheckbox.checked;
+                        this.saveToLocalStorage();
+                        // Обновить стили карточки без полной перерисовки
+                        card.style.background = originalService.done ? '#ecfdf5' : 'white';
+                        card.style.borderLeft = `4px solid ${originalService.paid ? '#10b981' : originalService.done ? '#f59e0b' : '#e5e7eb'}`;
+                        // Синхронизировать с конструктором смет
+                        this.renderServices();
+                        this.renderHotels();
+                        this.renderFlights();
+                        this.renderOtherServices();
+                    }
                 });
 
                 const doneLabel = document.createElement('div');
@@ -3763,16 +3789,20 @@
                 paidCheckbox.checked = service.paid;
                 paidCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
                 paidCheckbox.addEventListener('change', () => {
-                    service.paid = paidCheckbox.checked;
-                    this.saveToLocalStorage();
-                    // Обновить стили карточки без полной перерисовки
-                    card.style.background = service.done ? '#ecfdf5' : 'white';
-                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
-                    // Синхронизировать с конструктором смет
-                    this.renderServices();
-                    this.renderHotels();
-                    this.renderFlights();
-                    this.renderOtherServices();
+                    // ✅ FIX: Находим оригинальный service в state по ID и секции
+                    const originalService = this.findServiceInState(service.id, service._section);
+                    if (originalService) {
+                        originalService.paid = paidCheckbox.checked;
+                        this.saveToLocalStorage();
+                        // Обновить стили карточки без полной перерисовки
+                        card.style.background = originalService.done ? '#ecfdf5' : 'white';
+                        card.style.borderLeft = `4px solid ${originalService.paid ? '#10b981' : originalService.done ? '#f59e0b' : '#e5e7eb'}`;
+                        // Синхронизировать с конструктором смет
+                        this.renderServices();
+                        this.renderHotels();
+                        this.renderFlights();
+                        this.renderOtherServices();
+                    }
                 });
 
                 const paidLabel = document.createElement('div');
@@ -3791,16 +3821,20 @@
                 prepaymentCheckbox.checked = service.prepaymentReceived || false;
                 prepaymentCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
                 prepaymentCheckbox.addEventListener('change', () => {
-                    service.prepaymentReceived = prepaymentCheckbox.checked;
-                    this.saveToLocalStorage();
-                    // Обновить стили карточки без полной перерисовки
-                    card.style.background = service.done ? '#ecfdf5' : 'white';
-                    card.style.borderLeft = `4px solid ${service.paid ? '#10b981' : service.done ? '#f59e0b' : '#e5e7eb'}`;
-                    // Синхронизировать с конструктором смет
-                    this.renderServices();
-                    this.renderHotels();
-                    this.renderFlights();
-                    this.renderOtherServices();
+                    // ✅ FIX: Находим оригинальный service в state по ID и секции
+                    const originalService = this.findServiceInState(service.id, service._section);
+                    if (originalService) {
+                        originalService.prepaymentReceived = prepaymentCheckbox.checked;
+                        this.saveToLocalStorage();
+                        // Обновить стили карточки без полной перерисовки
+                        card.style.background = originalService.done ? '#ecfdf5' : 'white';
+                        card.style.borderLeft = `4px solid ${originalService.paid ? '#10b981' : originalService.done ? '#f59e0b' : '#e5e7eb'}`;
+                        // Синхронизировать с конструктором смет
+                        this.renderServices();
+                        this.renderHotels();
+                        this.renderFlights();
+                        this.renderOtherServices();
+                    }
                 });
 
                 const prepaymentLabel = document.createElement('div');
