@@ -12402,12 +12402,15 @@
                 if (quoteCommentsField) this.state.quoteComments = quoteCommentsField.value;
 
                 // Проверяем изменилось ли имя файла (например, добавили ФИО или изменили даты)
-                const newFilename = this.generateFilenameWithId({
+                const newFilenameWithJson = this.generateFilenameWithId({
                     id: this.state.currentQuoteId,
                     clientName: this.state.clientName,
                     tourStart: this.state.tourStart,
                     paxCount: this.state.paxCount
                 });
+
+                // ✅ FIX: Убираем .json расширение для новой БД (filename БЕЗ расширения)
+                const newFilename = newFilenameWithJson.replace(/\.json$/i, '');
 
                 // Если файла ещё нет - устанавливаем новое имя
                 if (!this.state.currentQuoteFile) {
@@ -12417,9 +12420,12 @@
                 // Если имя изменилось - переименовываем файл
                 else if (this.state.currentQuoteFile !== newFilename) {
                     try {
-                        await apiClient.renameEstimate(this.state.currentQuoteFile, newFilename);
-                        this.state.currentQuoteFile = newFilename;
-                        this.updateQuoteStatusBar();
+                        // ✅ FIX: Используем currentQuoteId (UUID), а не currentQuoteFile
+                        if (this.state.currentQuoteId) {
+                            await apiClient.renameEstimate(this.state.currentQuoteId, newFilename);
+                            this.state.currentQuoteFile = newFilename;
+                            this.updateQuoteStatusBar();
+                        }
                     } catch (err) {
                         console.error('Error renaming during autosave:', err);
                     }
