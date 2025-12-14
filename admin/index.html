@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Admin Panel - Magellania CRM">
+    <title>Admin Panel - Magellania CRM</title>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="admin.css">
+
+    <!-- Security -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: https:;
+        font-src 'self';
+        connect-src 'self' http://localhost:4000 http://localhost:3000;
+        frame-ancestors 'none';
+    ">
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app">
+        <!-- Loading State -->
+        <div id="loading" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>Loading...</p>
+        </div>
+
+        <!-- Auth Guard will redirect to login if not authenticated -->
+        <!-- App content will be rendered here by main.js -->
+    </div>
+
+    <!-- Scripts (ES6 Modules) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
