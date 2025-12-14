@@ -5,9 +5,11 @@
  * - POST /api/v1/auth/register - Регистрация org + admin
  * - POST /api/v1/auth/login - Авторизация
  * - POST /api/v1/auth/logout - Выход
+ * - GET  /api/v1/auth/verify - Проверка валидности JWT токена
  *
  * Created: 2025-11-19
- * Version: 3.0.0
+ * Updated: 2025-12-14 (added verify endpoint)
+ * Version: 3.1.0
  */
 
 const express = require('express');
@@ -208,6 +210,70 @@ router.post('/logout', requireAuth, (req, res) => {
         success: true,
         message: 'Logged out successfully'
     });
+});
+
+/**
+ * GET /api/v1/auth/verify
+ * Проверка валидности JWT токена
+ * Используется admin panel для проверки авторизации
+ */
+router.get('/verify', requireAuth, async (req, res) => {
+    try {
+        const storage = req.app.locals.storage;
+
+        // requireAuth middleware уже проверил токен и добавил req.user
+        // Дополнительно получаем полные данные пользователя из БД
+        const user = storage.db.prepare(`
+            SELECT
+                u.id, u.email, u.username, u.full_name, u.role,
+                u.organization_id, u.is_active, u.email_verified,
+                u.created_at, u.last_login_at,
+                o.name as organization_name, o.plan as organization_plan
+            FROM users u
+            LEFT JOIN organizations o ON u.organization_id = o.id
+            WHERE u.id = ? AND u.deleted_at IS NULL
+        `).get(req.user.id);
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                error: 'User not found or deleted'
+            });
+        }
+
+        if (!user.is_active) {
+            return res.status(403).json({
+                success: false,
+                error: 'Account is deactivated'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    username: user.username,
+                    full_name: user.full_name,
+                    role: user.role,
+                    organization_id: user.organization_id,
+                    organization_name: user.organization_name,
+                    organization_plan: user.organization_plan,
+                    email_verified: !!user.email_verified,
+                    created_at: user.created_at,
+                    last_login_at: user.last_login_at
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('Verify token error:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to verify token'
+        });
+    }
 });
 
 module.exports = router;
