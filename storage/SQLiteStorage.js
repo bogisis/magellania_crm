@@ -466,6 +466,22 @@ class SQLiteStorage extends StorageAdapter {
         return { success: true, id, newFilename };
     }
 
+    /**
+     * Save backup (для SQLite это no-op)
+     * SQLite uses Single Source of Truth - estimates table IS the backup
+     * No dual storage pattern needed (see docs/ru/developer-guide/data-integrity/)
+     *
+     * @param {string} id - ID сметы
+     * @param {Object} data - Данные сметы (не используются)
+     * @returns {Promise<Object>} { success: true }
+     */
+    async saveBackup(id, data) {
+        // ✅ Single Source of Truth: estimates table уже содержит все данные
+        // Не создаём дублирующие записи в backups table
+        // saveEstimate() уже сохранил всё необходимое
+        return { success: true };
+    }
+
     // ========================================================================
     // Catalogs (Каталоги услуг) - Multi-Tenant + Visibility
     // ========================================================================

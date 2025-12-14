@@ -12160,7 +12160,7 @@
             if (!jwtToken && !isLoginPage) {
                 // ❌ НЕТ токена и НЕ на странице логина → редирект
                 console.warn('[Auth Guard] No JWT token found, redirecting to login...');
-                window.location.href = '/login';
+                window.location.href = '/login.html';
                 return; // ОСТАНАВЛИВАЕМ инициализацию калькулятора
             }
 

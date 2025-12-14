@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+// API v1 Router (новая архитектура)
+const apiV1Router = require('./routes/api-v1');
 
 // Storage adapters
 const FileStorage = require('./storage/FileStorage');
@@ -97,6 +99,24 @@ async function dualWrite(operation, ...args) {
 
     return result;
 }
+
+// ============================================================================
+// API v1 Router Setup (новая архитектура с JWT auth)
+// ============================================================================
+
+// Передаём storage в app.locals для использования в v1 routes
+// Это позволяет routes получать storage через req.app.locals.storage
+app.set('storage', storage);
+app.locals.storage = storage;
+
+// Монтируем API v1 router
+app.use('/api/v1', apiV1Router);
+
+// ============================================================================
+// Legacy API Routes (старая архитектура без auth)
+// ============================================================================
+// TODO: Эти роуты будут удалены после полной миграции на API v1
+// Пока оставляем для обратной совместимости
 
 // ============================================================================
 // API для каталога
