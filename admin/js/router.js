@@ -1,11 +1,17 @@
 /**
  * Admin Panel Router
- * Version: 1.0.0
+ * Version: 2.0.0
  * Created: 2025-12-13
+ * Updated: 2025-12-14
  *
- * Simple hash-based client-side router
+ * Simple hash-based client-side router with component integration
  * No dependencies, no build step required
  */
+
+import { UserTable } from './components/UserTable.js';
+import { UserForm } from './components/UserForm.js';
+import { OrgTable } from './components/OrgTable.js';
+import { OrgForm } from './components/OrgForm.js';
 
 export class Router {
     constructor(options = {}) {
@@ -14,6 +20,7 @@ export class Router {
         this.routes = {};
         this.currentRoute = null;
         this.currentComponent = null;
+        this.currentModal = null;
     }
 
     /**
@@ -209,25 +216,20 @@ export class Router {
                 <p class="page-description">Manage system users and permissions</p>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">User List</h3>
-                </div>
-                <div class="card-body">
-                    <p>User management UI will be implemented in Week 4-5</p>
-                    <p class="mt-md">This page will include:</p>
-                    <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                        <li>User table with pagination</li>
-                        <li>Search and filtering</li>
-                        <li>Create/Edit/Delete users</li>
-                        <li>Reset password</li>
-                        <li>Manage user sessions</li>
-                    </ul>
-                </div>
-            </div>
+            <div id="userTableContainer"></div>
         `;
 
         this.renderLayout(content);
+
+        // Mount UserTable component
+        const container = document.getElementById('userTableContainer');
+        if (container) {
+            this.currentComponent = new UserTable(container, {
+                onCreateUser: () => this.showUserForm(),
+                onEditUser: (userId) => this.showUserForm(userId)
+            }, this.store);
+            this.currentComponent.mount();
+        }
     }
 
     /**
@@ -240,17 +242,20 @@ export class Router {
                 <p class="page-description">Manage organizations (Superadmin only)</p>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Organization List</h3>
-                </div>
-                <div class="card-body">
-                    <p>Organization management UI will be implemented in Week 4-5</p>
-                </div>
-            </div>
+            <div id="orgTableContainer"></div>
         `;
 
         this.renderLayout(content);
+
+        // Mount OrgTable component
+        const container = document.getElementById('orgTableContainer');
+        if (container) {
+            this.currentComponent = new OrgTable(container, {
+                onCreateOrg: () => this.showOrgForm(),
+                onEditOrg: (orgId) => this.showOrgForm(orgId)
+            }, this.store);
+            this.currentComponent.mount();
+        }
     }
 
     /**
@@ -360,5 +365,99 @@ export class Router {
                 <a href="#/" class="btn btn-primary">Go to Dashboard</a>
             </div>
         `;
+    }
+
+    /**
+     * Show user create/edit form modal
+     * @param {string} userId - User ID (for edit mode)
+     */
+    showUserForm(userId = null) {
+        // Create modal backdrop
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop';
+        modal.innerHTML = '<div class="modal-content"></div>';
+        document.body.appendChild(modal);
+
+        // Mount UserForm component
+        const container = modal.querySelector('.modal-content');
+        this.currentModal = new UserForm(container, {
+            userId,
+            onSaved: (user) => {
+                console.log('User saved:', user);
+                this.closeModal();
+                // Refresh user table
+                if (this.currentComponent && this.currentComponent.refresh) {
+                    this.currentComponent.refresh();
+                }
+            },
+            onClose: () => {
+                this.closeModal();
+            }
+        }, this.store);
+
+        this.currentModal.mount();
+
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('visible');
+        }, 10);
+    }
+
+    /**
+     * Show organization create/edit form modal
+     * @param {string} orgId - Organization ID (for edit mode)
+     */
+    showOrgForm(orgId = null) {
+        // Create modal backdrop
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop';
+        modal.innerHTML = '<div class="modal-content"></div>';
+        document.body.appendChild(modal);
+
+        // Mount OrgForm component
+        const container = modal.querySelector('.modal-content');
+        this.currentModal = new OrgForm(container, {
+            orgId,
+            onSaved: (org) => {
+                console.log('Organization saved:', org);
+                this.closeModal();
+                // Refresh org table
+                if (this.currentComponent && this.currentComponent.refresh) {
+                    this.currentComponent.refresh();
+                }
+            },
+            onClose: () => {
+                this.closeModal();
+            }
+        }, this.store);
+
+        this.currentModal.mount();
+
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('visible');
+        }, 10);
+    }
+
+    /**
+     * Close modal
+     */
+    closeModal() {
+        const modal = document.querySelector('.modal-backdrop');
+        if (!modal) return;
+
+        // Hide with animation
+        modal.classList.remove('visible');
+
+        setTimeout(() => {
+            // Unmount component
+            if (this.currentModal) {
+                this.currentModal.unmount();
+                this.currentModal = null;
+            }
+
+            // Remove modal from DOM
+            modal.remove();
+        }, 200);
     }
 }

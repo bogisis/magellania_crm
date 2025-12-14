@@ -1,18 +1,21 @@
 /**
  * Admin Panel - Main Entry Point
- * Version: 1.0.0
+ * Version: 2.0.0
  * Created: 2025-12-13
+ * Updated: 2025-12-14
  *
  * Responsibilities:
  * - Auth guard (redirect to login if not authenticated)
  * - App initialization
  * - Router setup
  * - Global error handling
+ * - Notification system
  */
 
 import { config } from './config.js';
 import { Router } from './router.js';
 import { Store } from './state/Store.js';
+import { authService } from './services/AuthService.js';
 
 /**
  * App Class - Main application controller
@@ -60,36 +63,23 @@ class App {
      * Redirect to login if not authenticated
      */
     async checkAuth() {
-        const token = localStorage.getItem('jwt_token');
-
-        if (!token) {
+        if (!authService.isAuthenticated()) {
             console.log('[App] No JWT token found, redirecting to login');
-            window.location.href = '/login.html';
+            window.location.href = '/admin/login.html';
             return;
         }
 
         try {
             // Verify token with server
-            const response = await fetch('/api/v1/auth/verify', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Token verification failed');
-            }
-
-            const data = await response.json();
+            const user = await authService.verify();
             this.isAuthenticated = true;
-            this.currentUser = data.user;
+            this.currentUser = user;
 
             console.log('[App] User authenticated:', this.currentUser.email);
 
         } catch (error) {
             console.error('[App] Auth check failed:', error);
-            localStorage.removeItem('jwt_token');
-            window.location.href = '/login.html';
+            window.location.href = '/admin/login.html';
         }
     }
 
@@ -128,7 +118,7 @@ class App {
         // Handle unhandled promise rejections
         window.addEventListener('unhandledrejection', (event) => {
             console.error('[App] Unhandled rejection:', event.reason);
-            this.showError('An unexpected error occurred');
+            this.showNotification('An unexpected error occurred', 'error');
         });
 
         // Handle regular errors
@@ -139,8 +129,16 @@ class App {
         // Handle 401 Unauthorized (token expired)
         window.addEventListener('unauthorized', () => {
             console.log('[App] Unauthorized access detected, redirecting to login');
-            localStorage.removeItem('jwt_token');
-            window.location.href = '/login.html';
+            this.showNotification('Session expired. Please login again.', 'warning');
+            setTimeout(() => {
+                window.location.href = '/admin/login.html';
+            }, 1000);
+        });
+
+        // Handle notifications
+        window.addEventListener('notification', (event) => {
+            const { message, type } = event.detail;
+            this.showNotification(message, type);
         });
     }
 
@@ -186,9 +184,46 @@ class App {
     /**
      * Logout user
      */
-    logout() {
-        localStorage.removeItem('jwt_token');
-        window.location.href = '/login.html';
+    async logout() {
+        try {
+            await authService.logout();
+        } catch (error) {
+            console.error('[App] Logout error:', error);
+        } finally {
+            window.location.href = '/admin/login.html';
+        }
+    }
+
+    /**
+     * Show notification toast
+     * @param {string} message - Notification message
+     * @param {string} type - Type: success, error, warning, info
+     */
+    showNotification(message, type = 'info') {
+        // Remove existing notifications
+        const existing = document.querySelectorAll('.notification-toast');
+        existing.forEach(el => el.remove());
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification-toast notification-${type}`;
+        notification.textContent = message;
+
+        // Add to DOM
+        document.body.appendChild(notification);
+
+        // Show with animation
+        setTimeout(() => {
+            notification.classList.add('visible');
+        }, 10);
+
+        // Auto hide after 3 seconds
+        setTimeout(() => {
+            notification.classList.remove('visible');
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 3000);
     }
 }
 

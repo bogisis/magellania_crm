@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Magellania CRM Admin</title>
+    <link rel="stylesheet" href="admin.css">
+    <style>
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .login-logo {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: var(--color-gray-600);
+            margin-bottom: 2rem;
+        }
+
+        .login-error {
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--color-danger);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            display: none;
+        }
+
+        .login-error.visible {
+            display: block;
+        }
+
+        .login-footer {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--color-gray-500);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-logo">Magellania</div>
+            <div class="login-subtitle">CRM Admin Panel</div>
+
+            <div id="loginError" class="login-error"></div>
+
+            <form id="loginForm" class="form">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="form-input"
+                        required
+                        autofocus
+                        autocomplete="email"
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="form-input"
+                        required
+                        autocomplete="current-password"
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" name="remember">
+                        Remember me
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="login-footer">
+                &copy; 2025 Magellania CRM. All rights reserved.
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { authService } from './js/services/AuthService.js';
+
+        const form = document.getElementById('loginForm');
+        const errorDiv = document.getElementById('loginError');
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Clear error
+            errorDiv.classList.remove('visible');
+            errorDiv.textContent = '';
+
+            // Get form data
+            const formData = new FormData(form);
+            const email = formData.get('email');
+            const password = formData.get('password');
+
+            // Validate
+            if (!email || !password) {
+                showError('Please enter email and password');
+                return;
+            }
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in...';
+
+            try {
+                // Login
+                const data = await authService.login(email, password);
+
+                // Success - redirect to admin panel
+                console.log('Login successful:', data.user.email);
+                window.location.href = '/admin/';
+
+            } catch (error) {
+                console.error('Login error:', error);
+                showError(error.message || 'Failed to login. Please try again.');
+
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign In';
+            }
+        });
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.add('visible');
+        }
+
+        // Check if already logged in
+        if (authService.isAuthenticated()) {
+            window.location.href = '/admin/';
+        }
+    </script>
+</body>
+</html>
