@@ -11,12 +11,12 @@ export const config = {
     app: {
         name: 'Magellania CRM - Admin Panel',
         version: '1.0.0',
-        environment: process?.env?.NODE_ENV || 'development'
+        environment: 'production'
     },
 
     // API configuration
     api: {
-        baseUrl: process?.env?.API_BASE_URL || 'http://localhost:4000',
+        baseUrl: window.location.origin,
         version: 'v1',
         timeout: 30000, // 30 seconds
         retryAttempts: 3
