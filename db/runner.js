@@ -24,9 +24,9 @@ const Database = require('better-sqlite3');
 // CONFIGURATION
 // =================================================================
 
-const MIGRATIONS_DIR = path.join(__dirname);
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 const DB_PATH = path.join(__dirname, '..', 'quotes.db');
-const LOG_PATH = path.join(__dirname, 'migration.log');
+const LOG_PATH = path.join(__dirname, 'migrations', 'migration.log');
 
 // =================================================================
 // MIGRATION TRACKING TABLE
