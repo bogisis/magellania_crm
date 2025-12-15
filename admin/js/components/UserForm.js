@@ -12,6 +12,7 @@
 
 import { BaseComponent } from './BaseComponent.js';
 import { userService } from '../services/UserService.js';
+import { orgService } from '../services/OrgService.js';
 import { validateForm, displayFormErrors, clearFormErrors } from '../utils/validators.js';
 import { isSuperadmin } from '../utils/permissions.js';
 
@@ -23,6 +24,7 @@ export class UserForm extends BaseComponent {
             mode: props.userId ? 'edit' : 'create',
             userId: props.userId || null,
             user: null,
+            organizations: [],
             loading: false,
             saving: false,
             error: null
@@ -32,8 +34,26 @@ export class UserForm extends BaseComponent {
     }
 
     async mounted() {
+        // Load organizations if superadmin
+        if (isSuperadmin(this.currentUser)) {
+            await this.loadOrganizations();
+        }
+
         if (this.state.mode === 'edit') {
             await this.loadUser();
+        }
+    }
+
+    /**
+     * Load organizations list (for superadmin)
+     */
+    async loadOrganizations() {
+        try {
+            const data = await orgService.getOrganizations({ limit: 100 });
+            this.state.organizations = data.organizations || [];
+        } catch (error) {
+            console.error('[UserForm] Load organizations error:', error);
+            // Don't block form if org load fails
         }
     }
 
@@ -124,6 +144,30 @@ export class UserForm extends BaseComponent {
                             maxlength="100"
                         />
                     </div>
+
+                    <!-- Organization (for superadmin or display for others) -->
+                    ${isSuperadmin(this.currentUser) ? `
+                        <div class="form-group">
+                            <label class="form-label" for="organization_id">
+                                Organization <span class="required">*</span>
+                            </label>
+                            <select
+                                id="organization_id"
+                                name="organization_id"
+                                class="form-select"
+                                required
+                            >
+                                <option value="">Select Organization</option>
+                                ${this.state.organizations.map(org => `
+                                    <option value="${org.id}" ${user.organization_id === org.id ? 'selected' : ''}>
+                                        ${this.escapeHtml(org.name)}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    ` : `
+                        <input type="hidden" name="organization_id" value="${this.currentUser.organization_id}" />
+                    `}
 
                     <!-- Password (only for create) -->
                     ${isCreate ? `
@@ -243,6 +287,7 @@ export class UserForm extends BaseComponent {
             email: formData.get('email'),
             username: formData.get('username') || null,
             full_name: formData.get('full_name') || null,
+            organization_id: formData.get('organization_id') || this.currentUser.organization_id,
             role: formData.get('role') || 'user', // Default to 'user' if disabled field
             is_active: formData.has('is_active') ? 1 : 0,
             email_verified: formData.has('email_verified') ? 1 : 0
@@ -298,6 +343,9 @@ export class UserForm extends BaseComponent {
             email: [
                 { type: 'required', label: 'Email' },
                 { type: 'email', message: 'Invalid email format' }
+            ],
+            organization_id: [
+                { type: 'required', label: 'Organization' }
             ],
             role: [
                 { type: 'required', label: 'Role' }

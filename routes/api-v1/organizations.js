@@ -18,26 +18,71 @@ const router = express.Router();
 
 /**
  * GET /api/v1/organizations
- * Список всех организаций (только для superuser)
+ * Список всех организаций (только для superadmin)
  */
-router.get('/', requireAuth, requireRole('superuser'), async (req, res) => {
+router.get('/', requireAuth, requireRole('superadmin'), async (req, res) => {
     try {
         const storage = req.app.locals.storage;
 
-        const organizations = storage.db.prepare(`
+        // Pagination params
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+        const sort = req.query.sort || 'created_at';
+        const order = req.query.order === 'asc' ? 'ASC' : 'DESC';
+        const search = req.query.search || '';
+        const planFilter = req.query.plan || '';
+        const isActiveFilter = req.query.is_active || '';
+
+        // Build WHERE clause
+        const whereClauses = ['deleted_at IS NULL'];
+        const params = [];
+
+        if (search) {
+            whereClauses.push('(name LIKE ? OR slug LIKE ?)');
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        if (planFilter) {
+            whereClauses.push('plan = ?');
+            params.push(planFilter);
+        }
+
+        if (isActiveFilter !== '') {
+            whereClauses.push('is_active = ?');
+            params.push(parseInt(isActiveFilter));
+        }
+
+        const whereClause = whereClauses.join(' AND ');
+
+        // Get total count
+        const countQuery = `SELECT COUNT(*) as total FROM organizations WHERE ${whereClause}`;
+        const { total } = storage.db.prepare(countQuery).get(...params);
+
+        // Get paginated organizations
+        const dataQuery = `
             SELECT id, name, slug, plan, subscription_status,
-                   max_users, max_estimates, max_catalogs,
-                   current_users_count, current_estimates_count, current_catalogs_count,
+                   max_users, max_estimates, max_catalogs, storage_limit_mb,
+                   current_users_count, current_estimates_count, current_catalogs_count, current_storage_mb,
                    is_active, created_at, updated_at
             FROM organizations
-            WHERE deleted_at IS NULL
-            ORDER BY created_at DESC
-        `).all();
+            WHERE ${whereClause}
+            ORDER BY ${sort} ${order}
+            LIMIT ? OFFSET ?
+        `;
+
+        const organizations = storage.db.prepare(dataQuery).all(...params, limit, offset);
 
         res.json({
             success: true,
             data: {
-                organizations
+                organizations,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.ceil(total / limit)
+                }
             }
         });
 
@@ -72,7 +117,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
         // Check access
         const canView =
-            req.user.role === 'superuser' ||
+            req.user.role === 'superadmin' ||
             req.user.organization_id === orgId;
 
         if (!canView) {
@@ -121,7 +166,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 
         // Check permissions
         const canUpdate =
-            req.user.role === 'superuser' ||
+            req.user.role === 'superadmin' ||
             (req.user.role === 'admin' && req.user.organization_id === orgId);
 
         if (!canUpdate) {
