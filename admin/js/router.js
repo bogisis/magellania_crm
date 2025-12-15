@@ -166,7 +166,7 @@ export class Router {
                         <a href="#/profile" class="btn btn-secondary btn-sm">
                             ${user.email || 'Profile'}
                         </a>
-                        <button onclick="app.logout()" class="btn btn-secondary btn-sm">
+                        <button id="logoutBtn" class="btn btn-secondary btn-sm">
                             Logout
                         </button>
                     </div>
@@ -178,6 +178,16 @@ export class Router {
                 </main>
             </div>
         `;
+
+        // Bind logout button
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                if (window.app && window.app.logout) {
+                    window.app.logout();
+                }
+            });
+        }
     }
 
     /**
