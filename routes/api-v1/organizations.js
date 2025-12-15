@@ -151,23 +151,23 @@ router.post('/', requireAuth, requireRole('superadmin'), async (req, res) => {
         const orgId = uuidv4();
         const now = new Date().toISOString();
 
-        // Insert organization
+        // Insert organization (owner_id = creating user)
         storage.db.prepare(`
             INSERT INTO organizations (
-                id, name, slug, plan, subscription_status,
+                id, name, slug, plan, subscription_status, owner_id,
                 max_users, max_estimates, max_catalogs, storage_limit_mb,
                 current_users_count, current_estimates_count, current_catalogs_count, current_storage_mb,
                 email, phone, website, address,
                 is_active, created_at, updated_at
             ) VALUES (
-                ?, ?, ?, ?, 'active',
+                ?, ?, ?, ?, 'active', ?,
                 ?, ?, ?, ?,
                 0, 0, 0, 0,
                 ?, ?, ?, ?,
                 1, ?, ?
             )
         `).run(
-            orgId, name, slug, plan,
+            orgId, name, slug, plan, req.user.id,
             max_users || quotas.users,
             max_estimates || quotas.estimates,
             max_catalogs || quotas.catalogs,
