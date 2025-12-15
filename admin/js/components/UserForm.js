@@ -98,7 +98,7 @@ export class UserForm extends BaseComponent {
                     <button class="btn btn-secondary btn-sm close-btn">Close</button>
                 </div>
 
-                <form class="form" id="userForm">
+                <form class="form" id="userForm" autocomplete="off">
                     <!-- Email -->
                     <div class="form-group">
                         <label class="form-label" for="email">
@@ -112,6 +112,7 @@ export class UserForm extends BaseComponent {
                             value="${this.escapeHtml(user.email || '')}"
                             required
                             ${!isCreate ? 'readonly' : ''}
+                            autocomplete="email"
                         />
                     </div>
 
@@ -182,6 +183,7 @@ export class UserForm extends BaseComponent {
                                 class="form-input"
                                 required
                                 minlength="8"
+                                autocomplete="new-password"
                             />
                             <small class="form-help">Minimum 8 characters</small>
                         </div>

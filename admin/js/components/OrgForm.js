@@ -110,7 +110,7 @@ export class OrgForm extends BaseComponent {
                     <button class="btn btn-secondary btn-sm close-btn">Close</button>
                 </div>
 
-                <form class="form" id="orgForm">
+                <form class="form" id="orgForm" autocomplete="off">
                     <!-- Name -->
                     <div class="form-group">
                         <label class="form-label" for="name">
@@ -124,6 +124,7 @@ export class OrgForm extends BaseComponent {
                             value="${this.escapeHtml(org.name || '')}"
                             required
                             maxlength="100"
+                            autocomplete="organization"
                         />
                     </div>
 
