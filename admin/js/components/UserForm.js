@@ -201,6 +201,7 @@ export class UserForm extends BaseComponent {
                         >
                             <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
                             <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                            ${canChangeRole ? `<option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Superadmin</option>` : ''}
                         </select>
                         ${!canChangeRole ? '<small class="form-help">Only superadmin can change roles</small>' : ''}
                     </div>
