@@ -243,7 +243,7 @@ export class UserForm extends BaseComponent {
             email: formData.get('email'),
             username: formData.get('username') || null,
             full_name: formData.get('full_name') || null,
-            role: formData.get('role'),
+            role: formData.get('role') || 'user', // Default to 'user' if disabled field
             is_active: formData.has('is_active') ? 1 : 0,
             email_verified: formData.has('email_verified') ? 1 : 0
         };

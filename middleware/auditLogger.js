@@ -125,7 +125,7 @@ async function logAudit(req, action, responseData, options) {
         };
 
         const stmt = storage.db.prepare(`
-            INSERT INTO audit_log (
+            INSERT INTO audit_logs (
                 id, user_id, organization_id, action, entity_type, entity_id,
                 changes_before, changes_after, metadata, created_at
             ) VALUES (
