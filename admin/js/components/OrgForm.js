@@ -31,6 +31,14 @@ export class OrgForm extends BaseComponent {
 
         this.currentUser = store?.get('user') || {};
 
+        // Plan quotas
+        this.planQuotas = {
+            free: { users: 5, estimates: 10, catalogs: 5, storage: 100 },
+            basic: { users: 20, estimates: 100, catalogs: 20, storage: 1000 },
+            pro: { users: 100, estimates: 1000, catalogs: 100, storage: 10000 },
+            enterprise: { users: 9999, estimates: 9999, catalogs: 9999, storage: 100000 }
+        };
+
         // Check permission
         if (!isSuperadmin(this.currentUser)) {
             this.state.error = 'Access denied - Superadmin only';
@@ -278,6 +286,24 @@ export class OrgForm extends BaseComponent {
             });
         }
 
+        // Plan change - auto-fill quotas
+        const planSelect = this.$('#plan');
+        if (planSelect) {
+            this.addEventListener(planSelect, 'change', (e) => {
+                this.fillPlanQuotas(e.target.value);
+            });
+        }
+
+        // Name change - auto-generate slug
+        const nameInput = this.$('#name');
+        const slugInput = this.$('#slug');
+        if (nameInput && slugInput && this.state.mode === 'create') {
+            this.addEventListener(nameInput, 'input', (e) => {
+                const slug = this.generateSlug(e.target.value);
+                slugInput.value = slug;
+            });
+        }
+
         const closeBtn = this.$('.close-btn');
         if (closeBtn) {
             this.addEventListener(closeBtn, 'click', () => {
@@ -291,6 +317,34 @@ export class OrgForm extends BaseComponent {
                 this.handleClose();
             });
         }
+    }
+
+    /**
+     * Fill quotas based on selected plan
+     */
+    fillPlanQuotas(plan) {
+        const quotas = this.planQuotas[plan];
+        if (!quotas) return;
+
+        const maxUsersInput = this.$('#max_users');
+        const maxEstimatesInput = this.$('#max_estimates');
+        const maxCatalogsInput = this.$('#max_catalogs');
+        const storageInput = this.$('#storage_limit_mb');
+
+        if (maxUsersInput) maxUsersInput.value = quotas.users;
+        if (maxEstimatesInput) maxEstimatesInput.value = quotas.estimates;
+        if (maxCatalogsInput) maxCatalogsInput.value = quotas.catalogs;
+        if (storageInput) storageInput.value = quotas.storage;
+    }
+
+    /**
+     * Generate URL-friendly slug from name
+     */
+    generateSlug(name) {
+        return name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
     }
 
     /**
@@ -314,6 +368,11 @@ export class OrgForm extends BaseComponent {
             api_rate_limit: parseInt(formData.get('api_rate_limit'), 10),
             is_active: formData.has('is_active') ? 1 : 0
         };
+
+        // Add slug for create mode
+        if (this.state.mode === 'create') {
+            data.slug = formData.get('slug') || this.generateSlug(data.name);
+        }
 
         // Validate
         const validation = this.validateOrgData(data);

@@ -96,6 +96,110 @@ router.get('/', requireAuth, requireRole('superadmin'), async (req, res) => {
 });
 
 /**
+ * POST /api/v1/organizations
+ * Создать новую организацию (только для superadmin)
+ */
+router.post('/', requireAuth, requireRole('superadmin'), async (req, res) => {
+    try {
+        const storage = req.app.locals.storage;
+        const { v4: uuidv4 } = require('uuid');
+
+        const {
+            name,
+            slug,
+            plan = 'free',
+            max_users,
+            max_estimates,
+            max_catalogs,
+            storage_limit_mb,
+            email,
+            phone,
+            website,
+            address
+        } = req.body;
+
+        // Validation
+        if (!name || !slug) {
+            return res.status(400).json({
+                success: false,
+                error: 'Name and slug are required'
+            });
+        }
+
+        // Check if slug already exists
+        const existing = storage.db.prepare(
+            'SELECT id FROM organizations WHERE slug = ? AND deleted_at IS NULL'
+        ).get(slug);
+
+        if (existing) {
+            return res.status(400).json({
+                success: false,
+                error: 'Organization with this slug already exists'
+            });
+        }
+
+        // Default quotas based on plan
+        const planQuotas = {
+            free: { users: 5, estimates: 10, catalogs: 5, storage: 100 },
+            basic: { users: 20, estimates: 100, catalogs: 20, storage: 1000 },
+            pro: { users: 100, estimates: 1000, catalogs: 100, storage: 10000 },
+            enterprise: { users: 9999, estimates: 9999, catalogs: 9999, storage: 100000 }
+        };
+
+        const quotas = planQuotas[plan] || planQuotas.free;
+
+        const orgId = uuidv4();
+        const now = new Date().toISOString();
+
+        // Insert organization
+        storage.db.prepare(`
+            INSERT INTO organizations (
+                id, name, slug, plan, subscription_status,
+                max_users, max_estimates, max_catalogs, storage_limit_mb,
+                current_users_count, current_estimates_count, current_catalogs_count, current_storage_mb,
+                email, phone, website, address,
+                is_active, created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, 'active',
+                ?, ?, ?, ?,
+                0, 0, 0, 0,
+                ?, ?, ?, ?,
+                1, ?, ?
+            )
+        `).run(
+            orgId, name, slug, plan,
+            max_users || quotas.users,
+            max_estimates || quotas.estimates,
+            max_catalogs || quotas.catalogs,
+            storage_limit_mb || quotas.storage,
+            email || null,
+            phone || null,
+            website || null,
+            address || null,
+            now, now
+        );
+
+        const organization = storage.db.prepare(
+            'SELECT * FROM organizations WHERE id = ?'
+        ).get(orgId);
+
+        res.status(201).json({
+            success: true,
+            data: {
+                organization
+            }
+        });
+
+    } catch (err) {
+        console.error('Create organization error:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create organization'
+        });
+    }
+});
+
+/**
  * GET /api/v1/organizations/:id
  * Получить информацию об организации (для членов org)
  */
@@ -129,7 +233,9 @@ router.get('/:id', requireAuth, async (req, res) => {
 
         res.json({
             success: true,
-            data: organization
+            data: {
+                organization
+            }
         });
 
     } catch (err) {
@@ -235,9 +341,16 @@ router.put('/:id', requireAuth, async (req, res) => {
         const query = `UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`;
         storage.db.prepare(query).run(...params);
 
+        // Return updated organization
+        const updatedOrg = storage.db.prepare(
+            'SELECT * FROM organizations WHERE id = ?'
+        ).get(orgId);
+
         res.json({
             success: true,
-            message: 'Organization updated successfully'
+            data: {
+                organization: updatedOrg
+            }
         });
 
     } catch (err) {
@@ -245,6 +358,57 @@ router.put('/:id', requireAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to update organization'
+        });
+    }
+});
+
+/**
+ * DELETE /api/v1/organizations/:id
+ * Удалить организацию (soft delete, только для superadmin)
+ */
+router.delete('/:id', requireAuth, requireRole('superadmin'), async (req, res) => {
+    try {
+        const storage = req.app.locals.storage;
+        const orgId = req.params.id;
+
+        // Check if organization exists
+        const organization = storage.db.prepare(
+            'SELECT * FROM organizations WHERE id = ? AND deleted_at IS NULL'
+        ).get(orgId);
+
+        if (!organization) {
+            return res.status(404).json({
+                success: false,
+                error: 'Organization not found'
+            });
+        }
+
+        const now = new Date().toISOString();
+
+        // Soft delete organization
+        storage.db.prepare(`
+            UPDATE organizations
+            SET deleted_at = ?, updated_at = ?
+            WHERE id = ?
+        `).run(now, now, orgId);
+
+        // Also soft delete all users in this organization
+        storage.db.prepare(`
+            UPDATE users
+            SET deleted_at = ?, updated_at = ?
+            WHERE organization_id = ? AND deleted_at IS NULL
+        `).run(now, now, orgId);
+
+        res.json({
+            success: true,
+            message: 'Organization deleted successfully'
+        });
+
+    } catch (err) {
+        console.error('Delete organization error:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete organization'
         });
     }
 });
